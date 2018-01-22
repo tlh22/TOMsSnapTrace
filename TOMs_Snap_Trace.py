@@ -252,17 +252,17 @@ class TOMsSnapTrace:
 
             for currRestrictionLayer in listRestrictionLayers:
 
-                self.snapNodes(currRestrictionLayer, GNSS_Points, tolerance)
+                self.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
                 
             # Snap end points together ...  (Perhaps could use a double loop here ...)
             QgsMessageLog.logMessage("********** Snapping lines to bays ...", tag="TOMs panel")
-            self.snapNodes(Lines, Bays, tolerance)
+            self.snapNodesL(Lines, Bays, tolerance)
 
             QgsMessageLog.logMessage("********** Snapping bays to bays ...", tag="TOMs panel")
-            self.snapNodes(Bays, Bays, tolerance)
+            self.snapNodesL(Bays, Bays, tolerance)
 
             QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
-            self.snapNodes(Lines, Lines, tolerance)
+            self.snapNodesL(Lines, Lines, tolerance)
 
             # Now snap vertices to the kerbline
             QgsMessageLog.logMessage("********** Snapping vertices to kerb ...", tag="TOMs panel")
@@ -281,7 +281,7 @@ class TOMsSnapTrace:
            
             # Set up all the layers - in init ...
  
-    def snapNodes(self, sourceLineLayer, snapPointLayer, tolerance):
+    def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
 
         QgsMessageLog.logMessage("In snapNodes", tag="TOMs panel")
 
@@ -306,6 +306,7 @@ class TOMsSnapTrace:
             #geom = feat.geometry()
             #attr = feat.attributes()
 
+            ptsCurrRestriction = currRestriction.geometry().asPolyline()
             currPoint = self.getStartPoint(currRestriction)
             currVertex = 0
             #QgsMessageLog.logMessage("currPoint geom type: " + str(currPoint.x()), tag="TOMs panel")
@@ -316,13 +317,10 @@ class TOMsSnapTrace:
                 # Move the vertex
                 QgsMessageLog.logMessage("SnapNodes: Moving start point for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
 
-                geomNearestPt = nearestPoint.geometry().asPoint()
-                nearestGeom = currRestriction.geometry()
-                moveStatus = nearestGeom.moveVertex(geomNearestPt.x(), geomNearestPt.y(),
-                                                    currVertex)
-                QgsMessageLog.logMessage("SnapNodes1. Moving status " + str(moveStatus),
-                                         tag="TOMs panel")
+                sourceLineLayer.moveVertex(nearestPoint.geometry().asPoint().x(), nearestPoint.geometry().asPoint().y(), currRestriction.id(), currVertex)
                 # currRestriction.geometry().moveVertex(nearestPoint, currVertex)
+                QgsMessageLog.logMessage("In findNearestPointP: closestPoint {}".format(nearestPoint.geometry().exportToWkt()),
+                                     tag="TOMs panel")
 
             currPoint = self.getEndPoint(currRestriction)
 
@@ -330,20 +328,92 @@ class TOMsSnapTrace:
 
             if nearestPoint:
                 # Move the vertex
-                QgsMessageLog.logMessage("SnapNodes: Moving end point for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
-                geomNearestPt = nearestPoint.geometry().asPoint()
-                nearestGeom = currRestriction.geometry()
-                moveStatus = nearestGeom.moveVertex(geomNearestPt.x(), geomNearestPt.y(),
-                                                    currVertex)
-                QgsMessageLog.logMessage("SnapNodes2. Moving status " + str(moveStatus),
-                                         tag="TOMs panel")
+                QgsMessageLog.logMessage("SnapNodes: Moving end point " + str(len(ptsCurrRestriction)-1) +
+                                         " for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
+                sourceLineLayer.moveVertex(nearestPoint.geometry().asPoint().x(),
+                                                      nearestPoint.geometry().asPoint().y(), currRestriction.id(),
+                                                    len(ptsCurrRestriction) - 1)
 
         editCommitStatus = sourceLineLayer.commitChanges()
 
-        reply = QMessageBox.information(None, "Check",
+        """reply = QMessageBox.information(None, "Check",
                                         "SnapNodes: Status for commit to " + sourceLineLayer.name() + " is: " + str(
                                             editCommitStatus),
-                                        QMessageBox.Ok)
+                                        QMessageBox.Ok)"""
+
+        if editCommitStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                sourceLineLayer.commitErrors()),
+                                            QMessageBox.Ok)
+
+        return
+
+    def snapNodesL(self, sourceLineLayer, snapLineLayer, tolerance):
+
+        QgsMessageLog.logMessage("In snapNodesL", tag="TOMs panel")
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        """reply = QMessageBox.information(None, "Check",
+                                        "snapNodesL: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                            editStartStatus),
+                                        QMessageBox.Ok)"""
+
+        if editStartStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+        # Snap node to nearest point
+
+        # For each restriction in layer
+        for currRestriction in sourceLineLayer.getFeatures():
+            #geom = feat.geometry()
+            #attr = feat.attributes()
+
+            ptsCurrRestriction = currRestriction.geometry().asPolyline()
+            currPoint = self.getStartPoint(currRestriction)
+            currVertex = 0
+            #QgsMessageLog.logMessage("currPoint geom type: " + str(currPoint.x()), tag="TOMs panel")
+
+            nearestPoint = self.findNearestPointL(currPoint, snapLineLayer, tolerance)   # returned as QgsFeature
+
+            if nearestPoint:
+                # Move the vertex
+                QgsMessageLog.logMessage("snapNodesL: Moving start point for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
+
+                sourceLineLayer.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), currRestriction.id(), currVertex)
+                # currRestriction.geometry().moveVertex(nearestPoint, currVertex)
+
+                QgsMessageLog.logMessage("Moving vertex ( " + str(currVertex) + ") to " + str(
+                    nearestPoint.asPoint().x()) + " " + str(nearestPoint.asPoint().y()),
+                                     tag="TOMs panel")
+            currPoint = self.getEndPoint(currRestriction)
+
+            nearestPoint = self.findNearestPointL(currPoint, snapLineLayer, tolerance)
+
+            if nearestPoint:
+                # Move the vertex
+                QgsMessageLog.logMessage("snapNodesL: Moving end point " + str(len(ptsCurrRestriction)-1) +
+                                         " for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
+                sourceLineLayer.moveVertex(nearestPoint.asPoint().x(),
+                                                     nearestPoint.asPoint().y(), currRestriction.id(),
+                                                    len(ptsCurrRestriction) - 1)
+                QgsMessageLog.logMessage("Moving vertex ( " + str(len(ptsCurrRestriction) - 1) + ") to " + str(
+                    nearestPoint.asPoint().x()) + " " + str(nearestPoint.asPoint().y()),
+                                     tag="TOMs panel")
+
+        editCommitStatus = sourceLineLayer.commitChanges()
+
+        """reply = QMessageBox.information(None, "Check",
+                                        "snapNodesL: Status for commit to " + sourceLineLayer.name() + " is: " + str(
+                                            editCommitStatus),
+                                        QMessageBox.Ok)"""
 
         if editCommitStatus is False:
             # save the active layer
@@ -387,8 +457,8 @@ class TOMsSnapTrace:
                                              tag="TOMs panel")
                     QgsMessageLog.logMessage("Moving from  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(nearestPoint.asPoint().x()) + " " + str(nearestPoint.asPoint().y()),
                                              tag="TOMs panel")
-                    moveStatus = geom.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), vertexNr)
-                    #moveStatus = sourceLineLayer.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), currRestriction.id(), vertexNr)
+                    #moveStatus = geom.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), vertexNr)
+                    moveStatus = sourceLineLayer.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), currRestriction.id(), vertexNr)
                     QgsMessageLog.logMessage("Moving status " + str(moveStatus),
                                              tag="TOMs panel")
 
@@ -426,7 +496,7 @@ class TOMsSnapTrace:
         for f in pointLayer.getFeatures(request):
             # Add any features that are found should be added to a list
 
-            QgsMessageLog.logMessage("findNearestPointP: nearestPoint geom type: " + str(f.geometry().wkbType()), tag="TOMs panel")
+            #QgsMessageLog.logMessage("findNearestPointP: nearestPoint geom type: " + str(f.geometry().wkbType()), tag="TOMs panel")
             dist = f.geometry().distance(QgsGeometry.fromPoint(searchPt))
             if dist < shortestDistance:
                 #QgsMessageLog.logMessage("findNearestPointP: found 'nearer' point", tag="TOMs panel")
@@ -434,13 +504,15 @@ class TOMsSnapTrace:
                 #nearestPoint = f.geometry()
                 nearestPoint = f
 
-        #QgsMessageLog.logMessage("In findNearestFeatureAt: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+        QgsMessageLog.logMessage("In findNearestFeatureAt: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
 
 
         if shortestDistance < float("inf"):
-            #QgsMessageLog.logMessage("nearestPoint: " + str(nearestPoint), tag="TOMs panel")
-            #QgsMessageLog.logMessage("findNearestPointP: nearestPoint geom type: " + nearestPoint.geometry().wkbType(), tag="TOMs panel")
-            return nearestPoint   # returns a point
+
+            QgsMessageLog.logMessage("In findNearestPointP: closestPoint {}".format(nearestPoint.geometry().exportToWkt()),
+                                     tag="TOMs panel")
+
+            return nearestPoint   # returns a geometry
         else:
             return None
 
@@ -528,8 +600,8 @@ class TOMsSnapTrace:
     def getEndPoint(self, restriction):
         #QgsMessageLog.logMessage("In getEndPoint", tag="TOMs panel")
 
-        len = restriction.geometry().length()
-        return restriction.geometry().vertexAt(len-1)
+        ptsCurrRestriction = restriction.geometry().asPolyline()
+        return restriction.geometry().vertexAt(len(ptsCurrRestriction)-1)
 
 
     def TraceRestriction(self, sourceLineLayer, snapLineLayer, tolerance):
@@ -683,8 +755,11 @@ class TOMsSnapTrace:
                                         "In TraceRestriction. Now adding vertices to restriction: vertex " + str(i) + " of " + str(len(ptsOnNearestLine)),
                                         tag="TOMs panel")
 
-                                    restGeom.insertVertex(ptsOnNearestLine[i].x(),
+                                    """restGeom.insertVertex(ptsOnNearestLine[i].x(),
                                                                  ptsOnNearestLine[i].y(),
+                                                                 currVertexNr)"""
+                                    sourceLineLayer.insertVertex(ptsOnNearestLine[i].x(),
+                                                                 ptsOnNearestLine[i].y(), currRestriction.id(),
                                                                  currVertexNr)
 
                             pass
@@ -770,7 +845,9 @@ class TOMsSnapTrace:
                             QgsMessageLog.logMessage(
                                 "In removeDuplicatePoints. " + str(currRestriction.attribute("GeometryID")) + ": Duplicate at vertex " + str(vertexNr-1) + " / " + str(vertexNr),
                                 tag="TOMs panel")
-                            restGeom.deleteVertex(vertexNr)
+                            #restGeom.deleteVertex(vertexNr)
+                            #restGeom.deleteVertex(vertexNr)
+                            sourceLineLayer.deleteVertex(currRestriction.id(), vertexNr)
                             vertexDeleted = True
 
                             QgsMessageLog.logMessage("Compared: curr  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(
@@ -802,7 +879,8 @@ class TOMsSnapTrace:
                             "In removeDuplicatePoints. " + str(
                                 currRestriction.attribute("GeometryID")) + ": Vertex " + str(vertexNr) + " is on line between previous two.",
                             tag="TOMs panel")
-                        restGeom.deleteVertex(vertexNr)
+                        #restGeom.deleteVertex(vertexNr)
+                        sourceLineLayer.deleteVertex(currRestriction.id(), vertexNr)
                         vertexDeleted = True
 
                         QgsMessageLog.logMessage("Compared: curr  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(
