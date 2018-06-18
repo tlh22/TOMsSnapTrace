@@ -1015,15 +1015,25 @@ class TOMsSnapTrace:
 
                             if distClosestVertexToA > distToA:
                                 includeClosestVertexToA = True
+                            else:
+                                if distClosestVertexToA == 0:
+                                    includeClosestVertexToA = True
+
                             if distClosestVertexToB < distToB:
-                                if nearestVertexNrToA <> nearestVertexNrToB:
-                                    includeClosestVertexToB = True
+                                includeClosestVertexToB = True
+
                         else:
+
                             if distClosestVertexToA < distToA:
                                 includeClosestVertexToA = True
                             if distClosestVertexToB > distToB:
-                                if nearestVertexNrToA <> nearestVertexNrToB:
+                                includeClosestVertexToB = True
+                            else:
+                                if distClosestVertexToB == 0:
                                     includeClosestVertexToB = True
+
+                        if nearestVertexNrToA == nearestVertexNrToB:
+                            includeClosestVertexToB = False
 
                         # Now add relevant kerb vertices to restriction
 
