@@ -1040,6 +1040,9 @@ class TOMsSnapTrace:
                         currSnapLineVertex = nearestVertexToA
                         currSnapLineVertexNr = nearestVertexNrToA
 
+                        QgsMessageLog.logMessage("In TraceRestriction2: ****** START nearestVertexToA " + str(nearestVertexNrToA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(nearestVertexNrToB), tag="TOMs panel")
+                        QgsMessageLog.logMessage("In TraceRestriction2: ******  includeClosestVertexToA " + str(includeClosestVertexToA) + "; includeClosestVertexToB " + str(includeClosestVertexToB) + " ascending: " + str(countDirection), tag="TOMs panel")
+
                         if includeClosestVertexToA:
                             newGeometryCoordsList.append(nearestVertexToA)
                             countNewVertices = countNewVertices + 1
@@ -1051,8 +1054,10 @@ class TOMsSnapTrace:
                                 reply = QMessageBox.information(None, "Error",
                                                                 "TraceRestriction2: Problem adding nearestVertexToA ",
                                                                 QMessageBox.Ok)"""
-
                         stopped = False
+
+                        if nearestVertexNrToA == nearestVertexNrToB:
+                            stopped = True  # set stop flag for loop
 
                         while not stopped:
 
@@ -1064,7 +1069,6 @@ class TOMsSnapTrace:
                                     currSnapLineVertexNr = 0
                                 else:
                                     currSnapLineVertex = nearestLineGeom.asPolyline()[currSnapLineVertexNr]
-
                             else:
                                 currSnapLineVertexNr = currSnapLineVertexNr - 1
                                 if currSnapLineVertexNr < 0:
@@ -1082,12 +1086,14 @@ class TOMsSnapTrace:
                             # add the vertex
 
                             newGeometryCoordsList.append(currSnapLineVertex)
-                            countNewVertices = countNewVertices + 1
+
                             QgsMessageLog.logMessage("In TraceRestriction2: countNewVertices " + str(countNewVertices), tag="TOMs panel")
                             QgsMessageLog.logMessage("In TraceRestriction2: countNewVertices " + str(nearestVertexNrToA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(nearestVertexNrToB), tag="TOMs panel")
 
-                            if countNewVertices > 1000:
-                                break
+                            countNewVertices = countNewVertices + 1
+
+                            """if countNewVertices > 1000:
+                                break"""
 
                 # Insert Vertex B. This is the final point in the line
                 newGeometryCoordsList.append(vertexB)
@@ -1095,22 +1101,23 @@ class TOMsSnapTrace:
 
                 # Now replace the orginal geometry of the current restriction with the new geometry
                 #currRestriction.setGeometry(QgsGeometry.fromPolyline(newGeometryCoordsList))
-                newGeometryCoordsListV2 = []
+                """newGeometryCoordsListV2 = []
                 lineString = QgsLineStringV2()
                 for x in newGeometryCoordsList:
                     newGeometryCoordsListV2.append(QgsPointV2(x))
 
                 lineString.setPoints(newGeometryCoordsListV2)
 
-                currRestriction.setGeometry(QgsGeometry(lineString))
+                currRestriction.setGeometry(QgsGeometry(lineString))"""
 
-                #sourceLineLayer.changeGeometry(currRestriction.id(), QgsGeometry.fromPolyline(newGeometryCoordsList))
+                sourceLineLayer.changeGeometry(currRestriction.id(), QgsGeometry.fromPolyline(newGeometryCoordsList))
 
                 QgsMessageLog.logMessage(
                     "In TraceRestriction2. " + str(currRestriction.attribute(
                             "GeometryID")) + ": geometry changed. New nrVertices " + str(
                         countNewVertices), tag="TOMs panel")
 
+                #break
                 # sourceLineLayer.changeGeometry(currRestriction.id(), newGeometry)
 
         # editCommitStatus = sourceLineLayer.commitChanges()
