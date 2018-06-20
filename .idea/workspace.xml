@@ -2,7 +2,6 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="cd34555e-841c-4f0a-85cd-69da4b557c45" name="Default" comment="">
-      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/TOMs_Snap_Trace.py" afterPath="$PROJECT_DIR$/TOMs_Snap_Trace.py" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -18,8 +17,8 @@
       <file leaf-file-name="TOMs_Snap_Trace.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/TOMs_Snap_Trace.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="850">
-              <caret line="1118" column="0" lean-forward="true" selection-start-line="1118" selection-start-column="0" selection-end-line="1118" selection-end-column="0" />
+            <state relative-caret-position="765">
+              <caret line="1183" column="35" lean-forward="false" selection-start-line="1183" selection-start-column="35" selection-end-line="1183" selection-end-column="35" />
               <folding>
                 <element signature="e#1172#1247#0" expanded="true" />
               </folding>
@@ -524,8 +523,8 @@
     <entry file="file://$USER_HOME$/Downloads/ChangeEditWidget/ChangeEditWidget/change_edit_widget.py" />
     <entry file="file://$PROJECT_DIR$/TOMs_Snap_Trace.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="850">
-          <caret line="1118" column="0" lean-forward="true" selection-start-line="1118" selection-start-column="0" selection-end-line="1118" selection-end-column="0" />
+        <state relative-caret-position="765">
+          <caret line="1183" column="35" lean-forward="false" selection-start-line="1183" selection-start-column="35" selection-end-line="1183" selection-end-column="35" />
           <folding>
             <element signature="e#1172#1247#0" expanded="true" />
           </folding>
