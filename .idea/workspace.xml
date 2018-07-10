@@ -2,6 +2,7 @@
 <project version="4">
   <component name="ChangeListManager">
     <list default="true" id="cd34555e-841c-4f0a-85cd-69da4b557c45" name="Default" comment="">
+      <change type="MODIFICATION" beforePath="$PROJECT_DIR$/.idea/workspace.xml" afterPath="$PROJECT_DIR$/.idea/workspace.xml" />
       <change type="MODIFICATION" beforePath="$PROJECT_DIR$/TOMs_Snap_Trace.py" afterPath="$PROJECT_DIR$/TOMs_Snap_Trace.py" />
     </list>
     <option name="EXCLUDED_CONVERTED_TO_IGNORED" value="true" />
@@ -17,8 +18,8 @@
       <file leaf-file-name="TOMs_Snap_Trace.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/TOMs_Snap_Trace.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="765">
-              <caret line="1183" column="35" lean-forward="false" selection-start-line="1183" selection-start-column="35" selection-end-line="1183" selection-end-column="35" />
+            <state relative-caret-position="-1572">
+              <caret line="462" column="50" lean-forward="true" selection-start-line="462" selection-start-column="50" selection-end-line="462" selection-end-column="50" />
               <folding>
                 <element signature="e#1172#1247#0" expanded="true" />
               </folding>
@@ -70,7 +71,6 @@
       <foldersAlwaysOnTop value="true" />
     </navigator>
     <panes>
-      <pane id="Scope" />
       <pane id="ProjectPane">
         <subPane>
           <PATH>
@@ -85,6 +85,7 @@
           </PATH>
         </subPane>
       </pane>
+      <pane id="Scope" />
       <pane id="Scratches" />
     </panes>
   </component>
@@ -523,8 +524,8 @@
     <entry file="file://$USER_HOME$/Downloads/ChangeEditWidget/ChangeEditWidget/change_edit_widget.py" />
     <entry file="file://$PROJECT_DIR$/TOMs_Snap_Trace.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="765">
-          <caret line="1183" column="35" lean-forward="false" selection-start-line="1183" selection-start-column="35" selection-end-line="1183" selection-end-column="35" />
+        <state relative-caret-position="-1572">
+          <caret line="462" column="50" lean-forward="true" selection-start-line="462" selection-start-column="50" selection-end-line="462" selection-end-column="50" />
           <folding>
             <element signature="e#1172#1247#0" expanded="true" />
           </folding>

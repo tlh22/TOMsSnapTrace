@@ -242,7 +242,7 @@ class TOMsSnapTrace:
 
             for currRestrictionLayer in listRestrictionLayers:
 
-                self.removeShortLines(currRestrictionLayer, tolerance)
+                self.removeShortLines(currRestrictionLayer, tolerance)"""
 
             QgsMessageLog.logMessage("********** Removing duplicate points", tag="TOMs panel")
 
@@ -271,8 +271,9 @@ class TOMsSnapTrace:
 
             for currRestrictionLayer in listRestrictionLayers:
 
-                self.snapVertices (currRestrictionLayer, Kerbline, tolerance)"""
-            
+                self.snapVertices (currRestrictionLayer, Kerbline, tolerance)
+
+            """
             # Now trace ...
             # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
             QgsMessageLog.logMessage("********** Tracing kerb ...", tag="TOMs panel")
@@ -282,6 +283,7 @@ class TOMsSnapTrace:
                 self.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)
            
             # Set up all the layers - in init ...
+            """
  
     def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
 
@@ -307,6 +309,9 @@ class TOMsSnapTrace:
         for currRestriction in sourceLineLayer.getFeatures():
             #geom = feat.geometry()
             #attr = feat.attributes()
+
+            if currRestriction.geometry() is None:
+                continue
 
             ptsCurrRestriction = currRestriction.geometry().asPolyline()
             currPoint = self.getStartPoint(currRestriction)
@@ -377,6 +382,9 @@ class TOMsSnapTrace:
         for currRestriction in sourceLineLayer.getFeatures():
             #geom = feat.geometry()
             #attr = feat.attributes()
+
+            if currRestriction.geometry() is None:
+                continue
 
             ptsCurrRestriction = currRestriction.geometry().asPolyline()
             currPoint = self.getStartPoint(currRestriction)
@@ -451,6 +459,10 @@ class TOMsSnapTrace:
                 tag="TOMs panel")
 
             geom = currRestriction.geometry()
+
+            if currRestriction.geometry() is None:
+                continue
+
             for vertexNr, vertexPt in enumerate(geom.asPolyline()):
 
                 nearestPoint = self.findNearestPointL(vertexPt, snapLineLayer, tolerance)
@@ -1272,6 +1284,9 @@ class TOMsSnapTrace:
             QgsMessageLog.logMessage(
                 "In removeDuplicatePoints. Considering " + str(currRestriction.attribute("GeometryID")),
                 tag="TOMs panel")
+
+            if restGeom is None:
+                continue
 
             line = currRestriction.geometry().asPolyline()
             #line = self.getLineForAz(currRestriction)
