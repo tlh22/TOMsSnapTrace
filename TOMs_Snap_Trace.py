@@ -231,6 +231,31 @@ class TOMsSnapTrace:
                 tolerance = 0.5
             QgsMessageLog.logMessage("Tolerance = " + str(tolerance), tag="TOMs panel")
 
+            removeShortLines = False
+            removeDuplicatePoints = False
+            snapNodesToGNSS = False
+            snapNodesTogether = False
+            snapVerticesToKerb = False
+            traceKerbline = False
+
+            if self.dlg.rb_removeShortLines.isChecked():
+                removeShortLines = True
+
+            if self.dlg.rb_removeDuplicatePoints.isChecked():
+                removeDuplicatePoints = True
+
+            if self.dlg.rb_snapNodesToGNSS.isChecked():
+                snapNodesToGNSS = True
+
+            if self.dlg.rb_snapNodesTogether.isChecked():
+                snapNodesTogether = True
+
+            if self.dlg.rb_snapVerticesToKerb.isChecked():
+                snapVerticesToKerb = True
+
+            if self.dlg.rb_traceKerbline.isChecked():
+                traceKerbline = True
+
             # Snap nodes to GNSS points ...
             # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
 
@@ -238,52 +263,63 @@ class TOMsSnapTrace:
 
             listRestrictionLayers = [Bays, Lines]
 
-            """QgsMessageLog.logMessage("********** Removing short lines", tag="TOMs panel")
+            if removeShortLines:
 
-            for currRestrictionLayer in listRestrictionLayers:
+                QgsMessageLog.logMessage("********** Removing short lines", tag="TOMs panel")
 
-                self.removeShortLines(currRestrictionLayer, tolerance)"""
+                """for currRestrictionLayer in listRestrictionLayers:
 
-            QgsMessageLog.logMessage("********** Removing duplicate points", tag="TOMs panel")
+                    self.removeShortLines(currRestrictionLayer, tolerance)"""
 
-            for currRestrictionLayer in listRestrictionLayers:
+            if removeDuplicatePoints:
 
-                self.removeDuplicatePoints(currRestrictionLayer, tolerance)
+                QgsMessageLog.logMessage("********** Removing duplicate points", tag="TOMs panel")
 
-            QgsMessageLog.logMessage("********** Snapping nodes to GNSS points", tag="TOMs panel")
+                for currRestrictionLayer in listRestrictionLayers:
 
-            for currRestrictionLayer in listRestrictionLayers:
+                    self.removeDuplicatePoints(currRestrictionLayer, tolerance)
 
-                self.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
-                
-            # Snap end points together ...  (Perhaps could use a double loop here ...)
-            QgsMessageLog.logMessage("********** Snapping lines to bays ...", tag="TOMs panel")
-            self.snapNodesL(Lines, Bays, tolerance)
+            if snapNodesToGNSS:
 
-            QgsMessageLog.logMessage("********** Snapping bays to bays ...", tag="TOMs panel")
-            self.snapNodesL(Bays, Bays, tolerance)
+                QgsMessageLog.logMessage("********** Snapping nodes to GNSS points", tag="TOMs panel")
 
-            QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
-            self.snapNodesL(Lines, Lines, tolerance)
+                for currRestrictionLayer in listRestrictionLayers:
 
-            # Now snap vertices to the kerbline
-            QgsMessageLog.logMessage("********** Snapping vertices to kerb ...", tag="TOMs panel")
+                    self.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
 
-            for currRestrictionLayer in listRestrictionLayers:
+            if snapNodesTogether:
+                # Snap end points together ...  (Perhaps could use a double loop here ...)
 
-                self.snapVertices (currRestrictionLayer, Kerbline, tolerance)
+                QgsMessageLog.logMessage("********** Snapping lines to bays ...", tag="TOMs panel")
+                self.snapNodesL(Lines, Bays, tolerance)
 
-            """
-            # Now trace ...
-            # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
-            QgsMessageLog.logMessage("********** Tracing kerb ...", tag="TOMs panel")
+                QgsMessageLog.logMessage("********** Snapping bays to bays ...", tag="TOMs panel")
+                self.snapNodesL(Bays, Bays, tolerance)
 
-            for currRestrictionLayer in listRestrictionLayers:
+                QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
+                self.snapNodesL(Lines, Lines, tolerance)
 
-                self.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)
-           
+            if snapVerticesToKerb:
+
+                QgsMessageLog.logMessage("********** Snapping vertices to kerb ...", tag="TOMs panel")
+
+                for currRestrictionLayer in listRestrictionLayers:
+
+                    self.snapVertices (currRestrictionLayer, Kerbline, tolerance)
+
+            if traceKerbline:
+
+                # Now trace ...
+                # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
+
+                QgsMessageLog.logMessage("********** Tracing kerb ...", tag="TOMs panel")
+
+                """for currRestrictionLayer in listRestrictionLayers:
+
+                    self.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)"""
+
             # Set up all the layers - in init ...
-            """
+
  
     def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
 
@@ -298,7 +334,7 @@ class TOMsSnapTrace:
 
         if editStartStatus is False:
             # save the active layer
-
+            QgsMessageLog.logMessage("Error: snapNodesP: Not able to start transaction on " + sourceLineLayer.name())
             reply = QMessageBox.information(None, "Error",
                                             "SnapNodes: Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
@@ -350,7 +386,8 @@ class TOMsSnapTrace:
 
         if editCommitStatus is False:
             # save the active layer
-
+            QgsMessageLog.logMessage("Error: snapNodesP: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                sourceLineLayer.commitErrors()))
             reply = QMessageBox.information(None, "Error",
                                             "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
                                                 sourceLineLayer.commitErrors()),
@@ -362,30 +399,32 @@ class TOMsSnapTrace:
 
         QgsMessageLog.logMessage("In snapNodesL", tag="TOMs panel")
 
-        editStartStatus = sourceLineLayer.startEditing()
-
-        """reply = QMessageBox.information(None, "Check",
-                                        "snapNodesL: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
-                                            editStartStatus),
-                                        QMessageBox.Ok)"""
-
-        if editStartStatus is False:
-            # save the active layer
-
-            reply = QMessageBox.information(None, "Error",
-                                            "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
-                                            QMessageBox.Ok)
-            return
-        # Snap node to nearest point
-
         # For each restriction in layer
         for currRestriction in sourceLineLayer.getFeatures():
             #geom = feat.geometry()
             #attr = feat.attributes()
 
+            editStartStatus = sourceLineLayer.startEditing()
+
+            """reply = QMessageBox.information(None, "Check",
+                                            "snapNodesL: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                                editStartStatus),
+                                            QMessageBox.Ok)"""
+
+            if editStartStatus is False:
+                # save the active layer
+
+                QgsMessageLog.logMessage("Error: snapNodesL: Not able to start transaction on " + sourceLineLayer.name())
+                reply = QMessageBox.information(None, "Error",
+                                                "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
+                                                QMessageBox.Ok)
+                return
+            # Snap node to nearest point
+
             if currRestriction.geometry() is None:
                 continue
 
+            QgsMessageLog.logMessage("In snapNodesL. Considering " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
             ptsCurrRestriction = currRestriction.geometry().asPolyline()
             currPoint = self.getStartPoint(currRestriction)
             currVertex = 0
@@ -420,20 +459,22 @@ class TOMsSnapTrace:
                     nearestPoint.asPoint().x()) + " " + str(nearestPoint.asPoint().y()),
                                      tag="TOMs panel")
 
-        editCommitStatus = sourceLineLayer.commitChanges()
+            editCommitStatus = sourceLineLayer.commitChanges()
 
-        """reply = QMessageBox.information(None, "Check",
-                                        "snapNodesL: Status for commit to " + sourceLineLayer.name() + " is: " + str(
-                                            editCommitStatus),
-                                        QMessageBox.Ok)"""
+            """reply = QMessageBox.information(None, "Check",
+                                            "snapNodesL: Status for commit to " + sourceLineLayer.name() + " is: " + str(
+                                                editCommitStatus),
+                                            QMessageBox.Ok)"""
 
-        if editCommitStatus is False:
-            # save the active layer
-
-            reply = QMessageBox.information(None, "Error",
-                                            "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
-                                                sourceLineLayer.commitErrors()),
-                                            QMessageBox.Ok)
+            if editCommitStatus is False:
+                # save the active layer
+                QgsMessageLog.logMessage("Error: snapNodesL: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                    sourceLineLayer.commitErrors()))
+                reply = QMessageBox.information(None, "Error",
+                                                "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                    sourceLineLayer.commitErrors()),
+                                                QMessageBox.Ok)
+                return
 
         return
 
@@ -446,7 +487,7 @@ class TOMsSnapTrace:
 
         if editStartStatus is False:
             # save the active layer
-
+            QgsMessageLog.logMessage("Error: snapVertices: Not able to start transaction on " + sourceLineLayer.name())
             reply = QMessageBox.information(None, "Error",
                                             "Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
@@ -484,7 +525,8 @@ class TOMsSnapTrace:
 
         if editCommitStatus is False:
             # save the active layer
-
+            QgsMessageLog.logMessage("Error: snapVertices: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                sourceLineLayer.commitErrors()))
             reply = QMessageBox.information(None, "Error",
                                             "Changes to " + sourceLineLayer.name() + " failed: " + str(
                                                 sourceLineLayer.commitErrors()),
@@ -494,7 +536,7 @@ class TOMsSnapTrace:
     def findNearestPointP(self, searchPt, pointLayer, tolerance):
         # given a point, find the nearest point (within the tolerance) within the given point layer
         # returns QgsPoint
-        #QgsMessageLog.logMessage("In findNearestPoint - pointLayer", tag="TOMs panel")
+        #QgsMessageLog.logMessage("In findNearestPointP - pointLayer", tag="TOMs panel")
 
         searchRect = QgsRectangle(searchPt.x() - tolerance,
                                   searchPt.y() - tolerance,
@@ -520,8 +562,10 @@ class TOMsSnapTrace:
                 #nearestPoint = f.geometry()
                 nearestPoint = f
 
-        QgsMessageLog.logMessage("In findNearestFeatureAt: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+        QgsMessageLog.logMessage("In findNearestPointP: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
 
+        del request
+        del searchRect
 
         if shortestDistance < float("inf"):
 
@@ -536,7 +580,7 @@ class TOMsSnapTrace:
     def findNearestPointL(self, searchPt, lineLayer, tolerance):
         # given a point, find the nearest point (within the tolerance) within the line layer
         # returns QgsPoint
-        QgsMessageLog.logMessage("In findNearestPoint - lineLayer", tag="TOMs panel")
+        QgsMessageLog.logMessage("In findNearestPointL. Checking lineLayer: " + lineLayer.name(), tag="TOMs panel")
         searchRect = QgsRectangle(searchPt.x() - tolerance,
                                   searchPt.y() - tolerance,
                                   searchPt.x() + tolerance,
@@ -559,7 +603,10 @@ class TOMsSnapTrace:
                 shortestDistance = dist
                 closestPoint = closestPtOnFeature
 
-        #QgsMessageLog.logMessage("In findNearestFeatureAt: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+        #QgsMessageLog.logMessage("In findNearestPointL: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+
+        del request
+        del searchRect
 
         if shortestDistance < float("inf"):
             #nearestPoint = QgsFeature()
@@ -610,6 +657,9 @@ class TOMsSnapTrace:
                 closestLine = f
 
         QgsMessageLog.logMessage("In findNearestLine: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+
+        del request
+        del searchRect
 
         if shortestDistance < float("inf"):
 
