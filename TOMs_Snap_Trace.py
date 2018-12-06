@@ -206,7 +206,7 @@ class TOMsSnapTrace:
 
             # Set up variables to layers - maybe obtained from form ??
 
-            """indexBaysLayer = self.dlg.baysLayer.currentIndex()
+            indexBaysLayer = self.dlg.baysLayer.currentIndex()
             Bays = self.dlg.baysLayer.itemData(indexBaysLayer)
 
             indexLinesLayer = self.dlg.linesLayer.currentIndex()
@@ -216,14 +216,14 @@ class TOMsSnapTrace:
             GNSS_Points = self.dlg.gnssPointsLayer.itemData(indexGNSSPointsLayer)
 
             indexsKerbLayer = self.dlg.kerbLayer.currentIndex()
-            Kerbline = self.dlg.kerbLayer.itemData(indexsKerbLayer)"""
-            
+            Kerbline = self.dlg.kerbLayer.itemData(indexsKerbLayer)
+
             #tolerance =  float(self.dlg.fld_Tolerance.text())
 
-            Bays = QgsMapLayerRegistry.instance().mapLayersByName("Bays")[0]
+            """Bays = QgsMapLayerRegistry.instance().mapLayersByName("Bays")[0]
             Lines = QgsMapLayerRegistry.instance().mapLayersByName("Lines")[0]
             GNSS_Points = QgsMapLayerRegistry.instance().mapLayersByName("gnssPts_180117")[0]
-            Kerbline = QgsMapLayerRegistry.instance().mapLayersByName("EDI_RoadCasement_Polyline")[0]
+            Kerbline = QgsMapLayerRegistry.instance().mapLayersByName("EDI_RoadCasement_Polyline")[0]"""
 
             if self.dlg.fld_Tolerance.text():
                 tolerance = float(self.dlg.fld_Tolerance.text())
@@ -261,7 +261,10 @@ class TOMsSnapTrace:
 
             # Set up list of layers to be processed
 
-            listRestrictionLayers = [Bays, Lines]
+            if Bays == Lines:
+                listRestrictionLayers = [Bays]
+            else:
+                listRestrictionLayers = [Bays, Lines]
 
             if removeShortLines:
 
@@ -290,14 +293,16 @@ class TOMsSnapTrace:
             if snapNodesTogether:
                 # Snap end points together ...  (Perhaps could use a double loop here ...)
 
-                QgsMessageLog.logMessage("********** Snapping lines to bays ...", tag="TOMs panel")
-                self.snapNodesL(Lines, Bays, tolerance)
+                if Bays != Lines:
+                    QgsMessageLog.logMessage("********** Snapping lines to bays ...", tag="TOMs panel")
+                    self.snapNodesL(Lines, Bays, tolerance)
 
                 QgsMessageLog.logMessage("********** Snapping bays to bays ...", tag="TOMs panel")
                 self.snapNodesL(Bays, Bays, tolerance)
 
-                QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
-                self.snapNodesL(Lines, Lines, tolerance)
+                if Bays != Lines:
+                    QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
+                    self.snapNodesL(Lines, Lines, tolerance)
 
             if snapVerticesToKerb:
 
@@ -314,9 +319,9 @@ class TOMsSnapTrace:
 
                 QgsMessageLog.logMessage("********** Tracing kerb ...", tag="TOMs panel")
 
-                """for currRestrictionLayer in listRestrictionLayers:
+                for currRestrictionLayer in listRestrictionLayers:
 
-                    self.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)"""
+                    self.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)
 
             # Set up all the layers - in init ...
 
@@ -327,10 +332,10 @@ class TOMsSnapTrace:
 
         editStartStatus = sourceLineLayer.startEditing()
 
-        """reply = QMessageBox.information(None, "Check",
+        reply = QMessageBox.information(None, "Check",
                                         "SnapNodes: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
                                             editStartStatus),
-                                        QMessageBox.Ok)"""
+                                        QMessageBox.Ok)
 
         if editStartStatus is False:
             # save the active layer
