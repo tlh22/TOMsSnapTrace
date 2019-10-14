@@ -189,14 +189,14 @@ class TOMsSnapTrace:
         # show the dialog
         self.dlg.show()
 
-        layers = QgsMapLayerRegistry.instance().mapLayers().values()
+        """layers = QgsMapLayerRegistry.instance().mapLayers().values()
         for layer in layers:
             if layer.type() == QgsMapLayer.VectorLayer:
                 self.dlg.baysLayer.addItem( layer.name(), layer )
                 self.dlg.linesLayer.addItem( layer.name(), layer )
                 self.dlg.gnssPointsLayer.addItem( layer.name(), layer )
                 self.dlg.kerbLayer.addItem(layer.name(), layer)
-                # self.dlg.layerValues.addItem( layer.name(), layer )
+                # self.dlg.layerValues.addItem( layer.name(), layer )"""
 
 
         # Run the dialog event loop
@@ -207,16 +207,16 @@ class TOMsSnapTrace:
             # Set up variables to layers - maybe obtained from form ??
 
             indexBaysLayer = self.dlg.baysLayer.currentIndex()
-            Bays = self.dlg.baysLayer.itemData(indexBaysLayer)
+            Bays = self.dlg.baysLayer.currentLayer()
 
             indexLinesLayer = self.dlg.linesLayer.currentIndex()
-            Lines = self.dlg.linesLayer.itemData(indexLinesLayer)
+            Lines = self.dlg.linesLayer.currentLayer()
 
             indexGNSSPointsLayer = self.dlg.gnssPointsLayer.currentIndex()
-            GNSS_Points = self.dlg.gnssPointsLayer.itemData(indexGNSSPointsLayer)
+            GNSS_Points = self.dlg.gnssPointsLayer.currentLayer()
 
             indexsKerbLayer = self.dlg.kerbLayer.currentIndex()
-            Kerbline = self.dlg.kerbLayer.itemData(indexsKerbLayer)
+            Kerbline = self.dlg.kerbLayer.currentLayer()
 
             #tolerance =  float(self.dlg.fld_Tolerance.text())
 
@@ -1310,6 +1310,54 @@ class TOMsSnapTrace:
                 return True
 
         return ascending
+
+    def TraceRestriction3(self, sourceLineLayer, snapLineLayer, tolerance):
+
+        """
+
+        :param sourceLineLayer:
+        :param snapLineLayer:
+        :param tolerance:
+        :return:
+
+        """
+
+        QgsMessageLog.logMessage("In TraceRestriction3", tag="TOMs panel")
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        reply = QMessageBox.information(None, "Check",
+                                        "TraceRestriction3: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                            editStartStatus),
+                                        QMessageBox.Ok)
+
+        if editStartStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "TraceRestriction3: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+
+        """ For each line in layer """
+
+        for currRestriction in sourceLineLayer.getFeatures():
+
+            # get nearest snapLineLayer feature (using the second vertex as the test)
+
+            QgsMessageLog.logMessage("In TraceRestriction2. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
+
+            currRestrictionGeom = currRestriction.geometry()
+            nrVerticesInCurrRestriction = len(currRestrictionGeom.asPolyline())
+
+            """	For each line segment in line (line segment is two points) """
+
+
+
+
+
+
+        return
 
     def removeDuplicatePoints(self, sourceLineLayer, tolerance):
         # function to remove duplicate points or ones that are colinear (?) or at least ones that double back

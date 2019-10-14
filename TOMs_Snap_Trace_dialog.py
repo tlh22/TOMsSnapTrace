@@ -24,6 +24,7 @@
 import os
 
 from PyQt4 import QtGui, uic
+#from qgis.gui import QgsMapLayerComboBox
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'TOMs_Snap_Trace_dialog_base.ui'))
