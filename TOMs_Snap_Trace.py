@@ -737,7 +737,7 @@ class TOMsSnapTrace:
                 # initialise a new Geometry
                 newGeometryCoordsList = []
                 #newGeometryVertexNr = 0
-                countDirection = None
+                countDirectionAscending = None
                 nrVerticesInSnapLine = len(nearestLineGeom.asPolyline())
                 lengthSnapLine = nearestLineGeom.length()
                 countNewVertices = 0
@@ -775,10 +775,12 @@ class TOMsSnapTrace:
                         distToA = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPoint(vertexA))  #QgsGeometry of point ??
                         distToB = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPoint(vertexB))
 
-                        # NB: countDirection only required once for each restriction
+                        # NB: countDirectionAscending only required once for each restriction
 
-                        if countDirection == None:
-                            countDirection = self.findCountDirection(distToA, distToB, lengthSnapLine, lengthAB)
+                        if countDirectionAscending == None:
+                            countDirectionAscending = self.findCountDirection(distToA, distToB, lengthSnapLine, lengthAB)
+
+                        QgsMessageLog.logMessage("In TraceRestriction2: ******  countDirectionAscending " + str(countDirectionAscending), tag="TOMs panel")
 
                         # get closest vertices ...  NB: closestVertex returns point with nearest distance not necessarily "along the line", e.g., in a cul-de-sac
 
@@ -789,7 +791,8 @@ class TOMsSnapTrace:
 
                         includeClosestVertexToA, nearestVertexNrToA, includeClosestVertexToB, \
                             nearestVertexNrToB = self.checkNeighbouringVertices(vertexA, vertexB, nearestLineGeom,
-                                                                                countDirection, distToA, distToB)
+                                                                                countDirectionAscending, distToA, distToB,
+                                                                                nrVerticesInCurrRestriction)
                              # Now add relevant kerb vertices to restriction
 
                         #currSnapLineVertex = nearestVertexToA
@@ -797,8 +800,8 @@ class TOMsSnapTrace:
                         currSnapLineVertexNr = nearestVertexNrToA  # TODO: Check that currSnapLineVertexNr is correct
 
                         QgsMessageLog.logMessage("In TraceRestriction2: ****** START nearestVertexToA " + str(nearestVertexNrToA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(nearestVertexNrToB), tag="TOMs panel")
-                        QgsMessageLog.logMessage("In TraceRestriction2: ****** START vertexNrAfterA " + str(nearestVertexNrToA) + " B: " + str(nearestVertexNrToB), tag="TOMs panel")
-                        QgsMessageLog.logMessage("In TraceRestriction2: ******  includeClosestVertexToA " + str(includeClosestVertexToA) + "; includeClosestVertexToB " + str(includeClosestVertexToB) + " ascending: " + str(countDirection), tag="TOMs panel")
+                        QgsMessageLog.logMessage("In TraceRestriction2: ****** START vertexNrAfterA " + str(nearestVertexNrToA) + " vertexNrAfterB: " + str(nearestVertexNrToB), tag="TOMs panel")
+                        QgsMessageLog.logMessage("In TraceRestriction2: ******  includeClosestVertexToA " + str(includeClosestVertexToA) + "; includeClosestVertexToB " + str(includeClosestVertexToB), tag="TOMs panel")
 
                         if includeClosestVertexToA:
                             newGeometryCoordsList.append(currSnapLineVertex)
@@ -818,7 +821,7 @@ class TOMsSnapTrace:
 
                         while not stopped:
 
-                            if countDirection == True:
+                            if countDirectionAscending == True:
                                 currSnapLineVertexNr = currSnapLineVertexNr + 1
                                 if currSnapLineVertexNr == nrVerticesInSnapLine:
                                     # currently at end of line and need to continue from start
@@ -954,10 +957,11 @@ class TOMsSnapTrace:
 
 
     def checkNeighbouringVertices(self, vertexA, vertexB,
-                                  nearestLineGeom, countDirection,
-                                  distToA, distToB):
+                                  nearestLineGeom, countDirectionAscending,
+                                  distToA, distToB,
+                                  nrVerticesInCurrRestriction):
 
-        # Now obtain the segement of the SnapLayer for B
+        # Now obtain the segement of the SnapLayer
         distSquared, closestPt, vertexNrAfterA = nearestLineGeom.closestSegmentWithContext(
             QgsPoint(vertexA.x(), vertexA.y()))
         distSquared, closestPt, vertexNrAfterB = nearestLineGeom.closestSegmentWithContext(
@@ -971,93 +975,77 @@ class TOMsSnapTrace:
             QgsGeometry.fromPoint(nearestLineGeom.asPolyline()[vertexNrAfterB]))
         # Work out whether or not nearest vertices need to be included …
 
-        distClosestVertexToA = distVertexAfterA  # this is just to simplify things ... rather than changing everything
-        distClosestVertexToB = distVertexAfterB
+        #distClosestVertexToA = distVertexAfterA  # this is just to simplify things ... rather than changing everything
+        #distClosestVertexToB = distVertexAfterB
         nearestVertexNrToA = vertexNrAfterA
         nearestVertexNrToB = vertexNrAfterB
 
         includeClosestVertexToA = False
         includeClosestVertexToB = False
 
-        if countDirection == True:  # ascending
+        # standard case(s)
+        if countDirectionAscending == True:  # ascending
 
-            if distClosestVertexToA > distToA:
-                includeClosestVertexToA = True
-            else:
-                if distClosestVertexToA == 0:
+            if distVertexAfterA > distToA:
+                if distVertexAfterB < distToB:
                     includeClosestVertexToA = True
+            """else:
+                if distVertexAfterA == 0:
+                    includeClosestVertexToA = True"""
 
-            if distClosestVertexToB < distToB:
+            if distVertexAfterB < distToB:
                 includeClosestVertexToB = True
 
-            comparisonVertexForB = vertexNrAfterB
+            #comparisonVertexForB = vertexNrAfterB
+
+            # consider situation where line passes through vertex #0
+            if vertexNrAfterB < vertexNrAfterA:
+                #if distVertexAfterA == 0:
+                if distToA > 0:
+                    if distToA > distToB:
+                        includeClosestVertexToA = True
+                #if distVertexAfterB == 0:
+                if distToB > 0:
+                    if distToA > distToB:
+                        includeClosestVertexToB = True
 
         else:
 
-            if distClosestVertexToA < distToA:
-                includeClosestVertexToA = True
-            if distClosestVertexToB > distToB:
+            if distVertexAfterA < distToA:
+                if distVertexAfterB > distToB:
+                    includeClosestVertexToA = True
+
+            if distVertexAfterB > distToB:
                 includeClosestVertexToB = True
             else:
-                if distClosestVertexToB == 0:
+                if distVertexAfterB == 0:
                     includeClosestVertexToB = True
+
+            # consider if either VertexAfter is 0
 
             comparisonVertexForB = vertexNrAfterB - 1
             if comparisonVertexForB < 0:
                 comparisonVertexForB = nrVerticesInCurrRestriction - 1
 
+            # consider situation where line passes through vertex #0
+            if vertexNrAfterB > vertexNrAfterA:
+                #if distVertexAfterA == 0:
+                if distToA > 0:
+                    if distToA > distToB:
+                        includeClosestVertexToA = True
+                #if distVertexAfterB == 0:
+                if distToB > 0:
+                    if distToA > distToB:
+                        includeClosestVertexToB = True
+
+        # consider if the nearest vertices are the same
         if nearestVertexNrToA == nearestVertexNrToB:
             includeClosestVertexToB = False
 
+
+
+
         return includeClosestVertexToA, nearestVertexNrToA, includeClosestVertexToB, nearestVertexNrToB
-
-def TraceRestriction3(self, sourceLineLayer, snapLineLayer, tolerance):
-
-        """
-
-        :param sourceLineLayer:
-        :param snapLineLayer:
-        :param tolerance:
-        :return:
-
-        """
-
-        QgsMessageLog.logMessage("In TraceRestriction3", tag="TOMs panel")
-
-        editStartStatus = sourceLineLayer.startEditing()
-
-        reply = QMessageBox.information(None, "Check",
-                                        "TraceRestriction3: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
-                                            editStartStatus),
-                                        QMessageBox.Ok)
-
-        if editStartStatus is False:
-            # save the active layer
-
-            reply = QMessageBox.information(None, "Error",
-                                            "TraceRestriction3: Not able to start transaction on " + sourceLineLayer.name(),
-                                            QMessageBox.Ok)
-            return
-
-        """ For each line in layer """
-
-        for currRestriction in sourceLineLayer.getFeatures():
-
-            # get nearest snapLineLayer feature (using the second vertex as the test)
-
-            QgsMessageLog.logMessage("In TraceRestriction2. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
-
-            currRestrictionGeom = currRestriction.geometry()
-            nrVerticesInCurrRestriction = len(currRestrictionGeom.asPolyline())
-
-            """	For each line segment in line (line segment is two points) """
-
-
-
-
-
-
-        return
 
     def removeDuplicatePoints(self, sourceLineLayer, tolerance):
         # function to remove duplicate points or ones that are colinear (?) or at least ones that double back
