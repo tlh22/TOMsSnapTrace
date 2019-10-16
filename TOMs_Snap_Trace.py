@@ -1029,29 +1029,26 @@ class TOMsSnapTrace:
             if distVertexAfterA > distToA:
                 #if distVertexAfterB < distToB:
                 includeVertexAfterA = True
-            """else:
-                if distVertexAfterA == 0:
-                    includeVertexAfterA = True"""
 
-            if distVertexAfterB < distToB:
+            if distVertexAfterB < distToB and distVertexAfterB > 0:
                 includeVertexAfterB = True
 
             #comparisonVertexForB = vertexNrAfterB
 
             # consider situation where line passes through vertex #0
-            if vertexNrAfterB < vertexNrAfterA:
+            if (distVertexAfterB < distVertexAfterA) or distVertexAfterA == 0:
                 #if distVertexAfterA == 0:
                 if distToA > 0:
-                    if distToA > distToB:
+                    if distToA < distVertexAfterA:
                         includeVertexAfterA = True
                 #if distVertexAfterB == 0:
                 if distToB > 0:
-                    if distToA > distToB:
+                    if distToB > distVertexAfterB:
                         includeVertexAfterB = True
 
         else:
 
-            if distVertexAfterA < distToA:
+            if distVertexAfterA < distToA and distVertexAfterA > 0:
                 #if distVertexAfterB > distToB:
                 includeVertexAfterA = True
 
@@ -1063,23 +1060,23 @@ class TOMsSnapTrace:
 
             # consider if either VertexAfter is 0
 
-            comparisonVertexForB = vertexNrAfterB - 1
+            """comparisonVertexForB = vertexNrAfterB - 1
             if comparisonVertexForB < 0:
-                comparisonVertexForB = nrVerticesInCurrRestriction - 1
+                comparisonVertexForB = nrVerticesInCurrRestriction - 1"""
 
             # consider situation where line passes through vertex #0
-            if vertexNrAfterB > vertexNrAfterA:
+            if (distVertexAfterB > distVertexAfterA) or distVertexAfterB == 0:
                 #if distVertexAfterA == 0:
                 if distToA > 0:
-                    if distToA > distToB:
+                    if distToA > distVertexAfterA:
                         includeVertexAfterA = True
                 #if distVertexAfterB == 0:
                 if distToB > 0:
-                    if distToA > distToB:
+                    if distToB < distVertexAfterB:
                         includeVertexAfterB = True
 
         # consider if the nearest vertices are the same
-        if vertexNrAfterA == vertexNrAfterB:
+        if distVertexAfterA == distVertexAfterB:
             includeVertexAfterB = False
             if distVertexAfterB > distToB:
                 includeVertexAfterA = False
