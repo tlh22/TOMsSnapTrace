@@ -719,7 +719,7 @@ class TOMsSnapTrace:
             currRestrictionGeom = currRestriction.geometry()
             nrVerticesInCurrRestriction = len(currRestrictionGeom.asPolyline())
 
-            nearestLine = self.nearbyLineFeature(currRestrictionGeom, snapLineLayer, 0.01)
+            nearestLine = self.nearbyLineFeature(currRestrictionGeom, snapLineLayer, DUPLICATE_POINT_DISTANCE)
 
             # Check that this is not a circular feature, i.e., with the end points close to each other. If it is, it will cause some difficulties ...
             if self.circularFeature(currRestriction, tolerance):
@@ -757,9 +757,10 @@ class TOMsSnapTrace:
                     newGeometryCoordsList.append(vertexA)
                     countNewVertices = countNewVertices + 1
 
-                    # Does this segement lie on the Snapline?
+                    # Does this segement lie on the Snapline? and if it lies within the buffer
 
-                    if self.pointsOnLine(vertexA, vertexB, nearestLineGeom, 0.01):
+                    if self.pointsOnLine(vertexA, vertexB, nearestLineGeom, DUPLICATE_POINT_DISTANCE) and \
+                            self.lineInBuffer(vertexA, vertexB, nearestLineGeom, tolerance):
 
                         QgsMessageLog.logMessage(
                             "In TraceRestriction2. " + str(
@@ -933,6 +934,20 @@ class TOMsSnapTrace:
             return True
         else:
             return False
+
+    def lineInBuffer(self, vertexA, vertexB, nearestLineGeom, bufferWidth):
+
+        QgsMessageLog.logMessage("In lineInBuffer", tag="TOMs panel")
+
+        isWithin = False
+
+        lineAB_Geom = QgsGeometry.fromPolyline([vertexA, vertexB])
+        bufferGeom = nearestLineGeom.buffer(bufferWidth, 5)
+
+        if lineAB_Geom.within(bufferGeom):
+            isWithin = True
+
+        return isWithin
 
     def findCountDirection(self, distToA, distToB, lengthSnapLine, lengthAB):
 
