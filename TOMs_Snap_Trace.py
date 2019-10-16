@@ -788,8 +788,7 @@ class TOMsSnapTrace:
 
                         includeVertexAfterA, vertexNrAfterA, includeVertexAfterB, \
                             vertexNrAfterB = self.checkNeighbouringVertices(vertexA, vertexB, nearestLineGeom,
-                                                                                countDirectionAscending, distToA, distToB,
-                                                                                nrVerticesInCurrRestriction)
+                                                                                countDirectionAscending, distToA, distToB)
                         # Now add relevant kerb vertices to restriction
 
                         currSnapLineVertex = nearestLineGeom.asPolyline()[vertexNrAfterA]
@@ -993,8 +992,7 @@ class TOMsSnapTrace:
 
     def checkNeighbouringVertices(self, vertexA, vertexB,
                                   nearestLineGeom, countDirectionAscending,
-                                  distToA, distToB,
-                                  nrVerticesInCurrRestriction):
+                                  distToA, distToB):
 
         # Now obtain the segement of the SnapLayer
         distSquared, closestPt, vertexNrAfterA = nearestLineGeom.closestSegmentWithContext(
@@ -1002,18 +1000,11 @@ class TOMsSnapTrace:
         distSquared, closestPt, vertexNrAfterB = nearestLineGeom.closestSegmentWithContext(
             QgsPoint(vertexB.x(), vertexB.y()))
 
-        # distClosestVertexToA = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPoint(nearestVertexToA))  # QgsPoint
-        # distClosestVertexToB = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPoint(nearestVertexToB))
         distVertexAfterA = nearestLineGeom.lineLocatePoint(
             QgsGeometry.fromPoint(nearestLineGeom.asPolyline()[vertexNrAfterA]))  # QgsPoint
         distVertexAfterB = nearestLineGeom.lineLocatePoint(
             QgsGeometry.fromPoint(nearestLineGeom.asPolyline()[vertexNrAfterB]))
         # Work out whether or not nearest vertices need to be included …
-
-        #distClosestVertexToA = distVertexAfterA  # this is just to simplify things ... rather than changing everything
-        #distClosestVertexToB = distVertexAfterB
-        #nearestVertexNrToA = vertexNrAfterA
-        #nearestVertexNrToB = vertexNrAfterB
 
         includeVertexAfterA = False
         includeVertexAfterB = False
