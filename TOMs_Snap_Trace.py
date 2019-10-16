@@ -30,8 +30,9 @@ from qgis.gui import *
 import resources
 # Import the code for the dialog
 from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
-import os.path
+import os.path, math
 
+DUPLICATE_POINT_DISTANCE = 0.02
 
 class TOMsSnapTrace:
     """QGIS Plugin Implementation."""
@@ -280,7 +281,7 @@ class TOMsSnapTrace:
 
                 for currRestrictionLayer in listRestrictionLayers:
 
-                    self.removeDuplicatePoints(currRestrictionLayer, tolerance)
+                    self.removeDuplicatePoints(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
 
             if snapNodesToGNSS:
 
@@ -784,28 +785,30 @@ class TOMsSnapTrace:
 
                         # get closest vertices ...  NB: closestVertex returns point with nearest distance not necessarily "along the line", e.g., in a cul-de-sac
 
-                        """nearestVertexToA, nearestVertexNrToA, prevVertexNrToA, \
-                            nextVertexNrToA, dist = nearestLineGeom.closestVertex(QgsPoint(vertexA.x(), vertexA.y()))  # NB: QgsPointXY
-                        nearestVertexToB, nearestVertexNrToB, prevVertexNrToB, \
-                            nextVertexNrToB, dist = nearestLineGeom.closestVertex(QgsPoint(vertexB.x(), vertexB.y()))  # NB: QgsPointXY"""
-
-                        includeClosestVertexToA, nearestVertexNrToA, includeClosestVertexToB, \
-                            nearestVertexNrToB = self.checkNeighbouringVertices(vertexA, vertexB, nearestLineGeom,
+                        includeVertexAfterA, vertexNrAfterA, includeVertexAfterB, \
+                            vertexNrAfterB = self.checkNeighbouringVertices(vertexA, vertexB, nearestLineGeom,
                                                                                 countDirectionAscending, distToA, distToB,
                                                                                 nrVerticesInCurrRestriction)
-                             # Now add relevant kerb vertices to restriction
+                        # Now add relevant kerb vertices to restriction
 
-                        #currSnapLineVertex = nearestVertexToA
-                        currSnapLineVertex = nearestLineGeom.asPolyline()[nearestVertexNrToA]
-                        currSnapLineVertexNr = nearestVertexNrToA  # TODO: Check that currSnapLineVertexNr is correct
+                        currSnapLineVertex = nearestLineGeom.asPolyline()[vertexNrAfterA]
+                        currSnapLineVertexNr = vertexNrAfterA
 
-                        QgsMessageLog.logMessage("In TraceRestriction2: ****** START nearestVertexToA " + str(nearestVertexNrToA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(nearestVertexNrToB), tag="TOMs panel")
-                        QgsMessageLog.logMessage("In TraceRestriction2: ****** START vertexNrAfterA " + str(nearestVertexNrToA) + " vertexNrAfterB: " + str(nearestVertexNrToB), tag="TOMs panel")
-                        QgsMessageLog.logMessage("In TraceRestriction2: ******  includeClosestVertexToA " + str(includeClosestVertexToA) + "; includeClosestVertexToB " + str(includeClosestVertexToB), tag="TOMs panel")
+                        QgsMessageLog.logMessage("In TraceRestriction2: ****** START nearestVertexAfterA " + str(vertexNrAfterA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(vertexNrAfterB), tag="TOMs panel")
+                        #QgsMessageLog.logMessage("In TraceRestriction2: ****** START vertexNrAfterA " + str(vertexNrAfterA) + " vertexNrAfterB: " + str(vertexNrAfterB), tag="TOMs panel")
+                        QgsMessageLog.logMessage("In TraceRestriction2: ******  includeVertexAfterA " + str(includeVertexAfterA) + "; includeVertexAfterB " + str(includeVertexAfterB), tag="TOMs panel")
 
-                        if includeClosestVertexToA:
-                            newGeometryCoordsList.append(currSnapLineVertex)
-                            countNewVertices = countNewVertices + 1
+                        if includeVertexAfterA:
+
+                            QgsMessageLog.logMessage(
+                                "In TraceRestriction2: includeVertexAfterA: " + str(currSnapLineVertexNr) + " currSnapLineVertex: " + str(currSnapLineVertex.x()) + "," + str(currSnapLineVertex.y()), tag="TOMs panel")
+                            QgsMessageLog.logMessage("In TraceRestriction2: includeVertexAfterA: vertexA: " + str(vertexA.x()) + "," + str(vertexA.y()), tag="TOMs panel")
+
+                            if not self.duplicatePoint(vertexA, currSnapLineVertex):
+                                if not self.duplicatePoint(vertexB, currSnapLineVertex):
+                                    newGeometryCoordsList.append(currSnapLineVertex)
+                                    countNewVertices = countNewVertices + 1
+                                    QgsMessageLog.logMessage("In TraceRestriction2: ... including trace line vertex " + str(currSnapLineVertexNr) + " : countNewVertices " + str(countNewVertices), tag="TOMs panel")
 
                             """status = self.insertVertexIntoRestriction(newGeometryCoordsList, curSnapLineVertex)
                             if status == True:
@@ -816,11 +819,12 @@ class TOMsSnapTrace:
                                                                 QMessageBox.Ok)"""
                         stopped = False
 
-                        if nearestVertexNrToA == nearestVertexNrToB:
+                        if vertexNrAfterA == vertexNrAfterB:
                             stopped = True  # set stop flag for loop
 
                         while not stopped:
 
+                            # find the next point (depending on direction of count and whether trace line index numbers pass 0)
                             if countDirectionAscending == True:
                                 currSnapLineVertexNr = currSnapLineVertexNr + 1
                                 if currSnapLineVertexNr == nrVerticesInSnapLine:
@@ -838,32 +842,39 @@ class TOMsSnapTrace:
                                 else:
                                     currSnapLineVertex = nearestLineGeom.asPolyline()[currSnapLineVertexNr]
 
-                            if currSnapLineVertexNr == nearestVertexNrToB:
+                            if currSnapLineVertexNr == vertexNrAfterB:
                                 stopped = True  # set stop flag for loop
-                                if includeClosestVertexToB == False:
+                                if includeVertexAfterB == False:
                                     break
 
-                            # add the vertex
+                            # add the vertex - check first to see if it duplicates the previous point
 
-                            newGeometryCoordsList.append(currSnapLineVertex)
-
-                            QgsMessageLog.logMessage("In TraceRestriction2: countNewVertices " + str(countNewVertices), tag="TOMs panel")
-                            QgsMessageLog.logMessage("In TraceRestriction2: countNewVertices " + str(nearestVertexNrToA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(nearestVertexNrToB), tag="TOMs panel")
-
-                            countNewVertices = countNewVertices + 1
+                            if not self.duplicatePoint(newGeometryCoordsList[countNewVertices-1], currSnapLineVertex):
+                                newGeometryCoordsList.append(currSnapLineVertex)
+                                countNewVertices = countNewVertices + 1
+                                QgsMessageLog.logMessage("In TraceRestriction2: ... including trace line vertex " + str(currSnapLineVertexNr) + " : countNewVertices " + str(countNewVertices), tag="TOMs panel")
+                                QgsMessageLog.logMessage("In TraceRestriction2: vertexNrAfterA " + str(vertexNrAfterA) + "; curr " + str(currSnapLineVertexNr) + " vertexNrAfterB: " + str(vertexNrAfterB), tag="TOMs panel")
 
                             """if countNewVertices > 1000:
                                 break"""
 
-                # Insert Vertex B. This is the final point in the line
-                newGeometryCoordsList.append(vertexB)
-                countNewVertices = countNewVertices + 1
+                # Insert Vertex B. This is the final point in the line - check for duplication ...
+                if self.duplicatePoint(vertexB, newGeometryCoordsList[-1]) and countNewVertices > 1:
+                    newGeometryCoordsList[-1] = vertexB
+                    QgsMessageLog.logMessage("In TraceRestriction2: overwriting last vertex ...", tag="TOMs panel")
+                else:
+                    newGeometryCoordsList.append(vertexB)
+                    countNewVertices = countNewVertices + 1
 
                 # Now replace the orginal geometry of the current restriction with the new geometry
                 #currRestriction.setGeometry(QgsGeometry.fromPolyline(newGeometryCoordsList))
 
                 newShape = QgsGeometry.fromPolyline(newGeometryCoordsList)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+                QgsMessageLog.logMessage("In TraceRestriction2. " + str(currRestriction.attribute("GeometryID")) +
+                                         ": geometry changed ***. New nrVertices " + str(countNewVertices), tag="TOMs panel")
+                QgsMessageLog.logMessage("In TraceRestriction2: new geom: " + str(currRestriction.geometry().exportToWkt()),
+                                         tag="TOMs panel")
                 QgsMessageLog.logMessage(
                     "In TraceRestriction2. " + str(currRestriction.attribute(
                         "GeometryID")) + ": geometry changed ***. New nrVertices " + str(
@@ -878,6 +889,15 @@ class TOMsSnapTrace:
             reply = QMessageBox.information(None, "Error",
                                             "Changes to " + sourceLineLayer.name() + " failed: " + str(
                                                 sourceLineLayer.commitErrors()), QMessageBox.Ok)
+
+    def duplicatePoint(self, pointA, pointB):
+
+        duplicate = False
+
+        if math.sqrt((pointA.x() - pointB.x())**2 + ((pointA.y() - pointB.y())**2)) < DUPLICATE_POINT_DISTANCE:
+            duplicate = True
+
+        return duplicate
 
     def circularFeature(self, currRestriction, lineTolerance):
 
@@ -977,24 +997,29 @@ class TOMsSnapTrace:
 
         #distClosestVertexToA = distVertexAfterA  # this is just to simplify things ... rather than changing everything
         #distClosestVertexToB = distVertexAfterB
-        nearestVertexNrToA = vertexNrAfterA
-        nearestVertexNrToB = vertexNrAfterB
+        #nearestVertexNrToA = vertexNrAfterA
+        #nearestVertexNrToB = vertexNrAfterB
 
-        includeClosestVertexToA = False
-        includeClosestVertexToB = False
+        includeVertexAfterA = False
+        includeVertexAfterB = False
+
+        QgsMessageLog.logMessage(
+            "In checkNeighbouringVertices: --- vertexNrAfterA " + str(vertexNrAfterA) + "; vertexNrAfterB: " + str(vertexNrAfterB), tag="TOMs panel")
+        QgsMessageLog.logMessage(
+            "In checkNeighbouringVertices: --- distVertexAfterA " + str(distVertexAfterA) + ": distToA " + str(distToA) + "; distVertexAfterB: " + str(distVertexAfterB) + ": distToB " + str(distToB), tag="TOMs panel")
 
         # standard case(s)
         if countDirectionAscending == True:  # ascending
 
             if distVertexAfterA > distToA:
-                if distVertexAfterB < distToB:
-                    includeClosestVertexToA = True
+                #if distVertexAfterB < distToB:
+                includeVertexAfterA = True
             """else:
                 if distVertexAfterA == 0:
-                    includeClosestVertexToA = True"""
+                    includeVertexAfterA = True"""
 
             if distVertexAfterB < distToB:
-                includeClosestVertexToB = True
+                includeVertexAfterB = True
 
             #comparisonVertexForB = vertexNrAfterB
 
@@ -1003,23 +1028,23 @@ class TOMsSnapTrace:
                 #if distVertexAfterA == 0:
                 if distToA > 0:
                     if distToA > distToB:
-                        includeClosestVertexToA = True
+                        includeVertexAfterA = True
                 #if distVertexAfterB == 0:
                 if distToB > 0:
                     if distToA > distToB:
-                        includeClosestVertexToB = True
+                        includeVertexAfterB = True
 
         else:
 
             if distVertexAfterA < distToA:
-                if distVertexAfterB > distToB:
-                    includeClosestVertexToA = True
+                #if distVertexAfterB > distToB:
+                includeVertexAfterA = True
 
             if distVertexAfterB > distToB:
-                includeClosestVertexToB = True
+                includeVertexAfterB = True
             else:
                 if distVertexAfterB == 0:
-                    includeClosestVertexToB = True
+                    includeVertexAfterB = True
 
             # consider if either VertexAfter is 0
 
@@ -1032,20 +1057,25 @@ class TOMsSnapTrace:
                 #if distVertexAfterA == 0:
                 if distToA > 0:
                     if distToA > distToB:
-                        includeClosestVertexToA = True
+                        includeVertexAfterA = True
                 #if distVertexAfterB == 0:
                 if distToB > 0:
                     if distToA > distToB:
-                        includeClosestVertexToB = True
+                        includeVertexAfterB = True
 
         # consider if the nearest vertices are the same
-        if nearestVertexNrToA == nearestVertexNrToB:
-            includeClosestVertexToB = False
+        if vertexNrAfterA == vertexNrAfterB:
+            includeVertexAfterB = False
+            if distVertexAfterB > distToB:
+                includeVertexAfterA = False
 
+        # finally check for duplicate (or close) points
+        if abs(distVertexAfterA - distToA) < DUPLICATE_POINT_DISTANCE:
+            includeVertexAfterA = False
+        if abs(distVertexAfterB - distToB) < DUPLICATE_POINT_DISTANCE:
+            includeVertexAfterB = False
 
-
-
-        return includeClosestVertexToA, nearestVertexNrToA, includeClosestVertexToB, nearestVertexNrToB
+        return includeVertexAfterA, vertexNrAfterA, includeVertexAfterB, vertexNrAfterB
 
     def removeDuplicatePoints(self, sourceLineLayer, tolerance):
         # function to remove duplicate points or ones that are colinear (?) or at least ones that double back

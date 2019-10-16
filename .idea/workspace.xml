@@ -15,8 +15,8 @@
       <file leaf-file-name="TOMs_Snap_Trace.py" pinned="false" current-in-tab="true">
         <entry file="file://$PROJECT_DIR$/TOMs_Snap_Trace.py">
           <provider selected="true" editor-type-id="text-editor">
-            <state relative-caret-position="443">
-              <caret line="1030" column="31" lean-forward="false" selection-start-line="1030" selection-start-column="31" selection-end-line="1030" selection-end-column="31" />
+            <state relative-caret-position="2480">
+              <caret line="892" column="45" lean-forward="true" selection-start-line="892" selection-start-column="45" selection-end-line="892" selection-end-column="45" />
               <folding>
                 <element signature="e#1172#1247#0" expanded="true" />
               </folding>
@@ -40,10 +40,23 @@
       <find>current</find>
       <find>lineLocatePoint</find>
       <find>distClosestVertexToB</find>
+      <find>includeClosestVertexToB</find>
+      <find>includeClosestVertexToA</find>
+      <find>includevertexAfter</find>
+      <find>nearestVertexNrToA</find>
+      <find>nearestVertexNrToB</find>
+      <find>DUPLICATE_POINT_DISTANCE</find>
+      <find>exportToWkt</find>
     </findStrings>
     <replaceStrings>
       <replace>distVertexAfterA</replace>
       <replace>distVertexAfterB</replace>
+      <replace>includevertexAfterB</replace>
+      <replace>includevertexAfterA</replace>
+      <replace>includeVertexAfter</replace>
+      <replace>vertexNrAfterA</replace>
+      <replace>vertexNrAfterB</replace>
+      <replace>asWkt</replace>
     </replaceStrings>
   </component>
   <component name="Git.Settings">
@@ -525,8 +538,8 @@
     </entry>
     <entry file="file://$PROJECT_DIR$/TOMs_Snap_Trace.py">
       <provider selected="true" editor-type-id="text-editor">
-        <state relative-caret-position="443">
-          <caret line="1030" column="31" lean-forward="false" selection-start-line="1030" selection-start-column="31" selection-end-line="1030" selection-end-column="31" />
+        <state relative-caret-position="2480">
+          <caret line="892" column="45" lean-forward="true" selection-start-line="892" selection-start-column="45" selection-end-line="892" selection-end-column="45" />
           <folding>
             <element signature="e#1172#1247#0" expanded="true" />
           </folding>
