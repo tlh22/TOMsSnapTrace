@@ -894,7 +894,9 @@ class TOMsSnapTrace:
 
         duplicate = False
 
-        if math.sqrt((pointA.x() - pointB.x())**2 + ((pointA.y() - pointB.y())**2)) < DUPLICATE_POINT_DISTANCE:
+        if pointA is None or pointB is None:
+            duplicate = False
+        elif math.sqrt((pointA.x() - pointB.x())**2 + ((pointA.y() - pointB.y())**2)) < DUPLICATE_POINT_DISTANCE:
             duplicate = True
 
         return duplicate
@@ -1104,79 +1106,59 @@ class TOMsSnapTrace:
         # For each restriction in layer
         for currRestriction in sourceLineLayer.getFeatures():
 
-            restGeom = currRestriction.geometry()
-            QgsMessageLog.logMessage(
-                "In removeDuplicatePoints. Considering " + str(currRestriction.attribute("GeometryID")),
-                tag="TOMs panel")
+            QgsMessageLog.logMessage("In removeDuplicates2. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
 
-            if restGeom is None:
+            currRestrictionGeom = currRestriction.geometry()
+            if currRestrictionGeom is None:
                 continue
 
-            line = currRestriction.geometry().asPolyline()
-            #line = self.getLineForAz(currRestriction)
-            for vertexNr in range(len(line)):
-            #for vertexNr, vertexPt in enumerate(geom.asPolyline(), start=1):
+            nrVerticesInCurrRestriction = len(currRestrictionGeom.asPolyline())
 
-                vertexPt = line[vertexNr]
-                vertexDeleted = False
 
-                if vertexNr > 0:
+            # initialise a new Geometry
+            newGeometryCoordsList = []
+            countNewVertices = 0
 
-                    prevPt = line[vertexNr-1]
+            for currVertexNr, currVertexPt in enumerate(currRestrictionGeom.asPolyline()):
 
-                    if abs(vertexPt.x() - prevPt.x()) < tolerance:
-                        if abs(vertexPt.y() - prevPt.y()) < tolerance:
-                            # have found duplicate
-                            QgsMessageLog.logMessage(
-                                "In removeDuplicatePoints. " + str(currRestriction.attribute("GeometryID")) + ": Duplicate at vertex " + str(vertexNr-1) + " / " + str(vertexNr),
-                                tag="TOMs panel")
-                            #restGeom.deleteVertex(vertexNr)
-                            #restGeom.deleteVertex(vertexNr)
-                            sourceLineLayer.deleteVertex(currRestriction.id(), vertexNr)
-                            vertexDeleted = True
+                # Check we haven't reached the last vertex
+                #if currVertexNr == (nrVerticesInCurrRestriction - 1):
+                #    break
 
-                            QgsMessageLog.logMessage("Compared: curr  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(
-                                prevPt.x()) + " " + str(prevPt.y()),
-                                tag="TOMs panel")
+                # add the vertex - check first to see if it duplicates the previous point
 
-                if vertexNr > 1 and vertexDeleted is False:
+                if countNewVertices > 0:
+                    if not self.duplicatePoint(newGeometryCoordsList[countNewVertices-1], currVertexPt):
+                        newGeometryCoordsList.append(currVertexPt)
+                        countNewVertices = countNewVertices + 1
 
-                    # check whether or not this point is on a line between the last two
-                    prevPtAgain = line[vertexNr-2]
+                else:
+                    newGeometryCoordsList.append(currVertexPt)
+                    countNewVertices = countNewVertices + 1
 
-                    geomVertex = QgsGeometry.fromPoint(vertexPt)
-                    distToLine = geomVertex.shortestLine(QgsGeometry.fromPolyline([prevPt, prevPtAgain])).length()
+            # Insert Vertex B. This is the final point in the line - check for duplication ...
+            """if self.duplicatePoint(currVertexPt, newGeometryCoordsList[-1]) and countNewVertices > 1:
+                newGeometryCoordsList[-1] = currVertexPt
+                QgsMessageLog.logMessage("In TraceRestriction2: overwriting last vertex ...", tag="TOMs panel")
+            else:
+                newGeometryCoordsList.append(currVertexPt)
+                countNewVertices = countNewVertices + 1"""
 
-                    """QgsMessageLog.logMessage(
-                        "In removeDuplicatePoints. " + str(
-                            currRestriction.attribute("GeometryID")) + ": check for point on line between " + str(
-                            vertexNr - 1) + " / " + str(vertexNr),
-                        tag="TOMs panel")
-                    QgsMessageLog.logMessage(
-                        "Comparing: line  " + str(prevPtAgain.x()) + " " + str(prevPtAgain.y()) + " to " + str(
-                            prevPt.x()) + " " + str(prevPt.y()) + ". Point is " + str(vertexPt.x()) + " " + str(vertexPt.y()) +
-                            ". Dist is " + str(distToLine),
-                        tag="TOMs panel")"""
+            # Now replace the orginal geometry of the current restriction with the new geometry
+            #currRestriction.setGeometry(QgsGeometry.fromPolyline(newGeometryCoordsList))
 
-                    if distToLine < tolerance:
+            if countNewVertices <> nrVerticesInCurrRestriction:
+                newShape = QgsGeometry.fromPolyline(newGeometryCoordsList)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+                QgsMessageLog.logMessage("In removeDuplicates2. " + str(currRestriction.attribute("GeometryID")) +
+                                         ": geometry changed ***. New nrVertices " + str(countNewVertices), tag="TOMs panel")
+                QgsMessageLog.logMessage("In removeDuplicates2: new geom: " + str(currRestriction.geometry().exportToWkt()),
+                                         tag="TOMs panel")
 
-                        QgsMessageLog.logMessage(
-                            "In removeDuplicatePoints. " + str(
-                                currRestriction.attribute("GeometryID")) + ": Vertex " + str(vertexNr) + " is on line between previous two.",
-                            tag="TOMs panel")
-                        #restGeom.deleteVertex(vertexNr)
-                        sourceLineLayer.deleteVertex(currRestriction.id(), vertexNr)
-                        vertexDeleted = True
 
-                        QgsMessageLog.logMessage("Compared: curr  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(
-                            prevPt.x()) + " " + str(prevPt.y()),
-                                                 tag="TOMs panel")
+        #editCommitStatus = sourceLineLayer.commitChanges()
 
-            pass
-
-        editCommitStatus = sourceLineLayer.commitChanges()
-
-        #editCommitStatus = False
+        editCommitStatus = False
 
         if editCommitStatus is False:
             # save the active layer
@@ -1186,7 +1168,7 @@ class TOMsSnapTrace:
                                                 sourceLineLayer.commitErrors()),
                                             QMessageBox.Ok)
 
-def removeShortLines(self, sourceLineLayer, tolerance):
+    def removeShortLines(self, sourceLineLayer, tolerance):
         # function to remove duplicate points or ones that are colinear (?) or at least ones that double back
 
         QgsMessageLog.logMessage("In removeShortLines", tag="TOMs panel")
