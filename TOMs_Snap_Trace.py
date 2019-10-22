@@ -1118,6 +1118,7 @@ class TOMsSnapTrace:
             # initialise a new Geometry
             newGeometryCoordsList = []
             countNewVertices = 0
+            distLastVertex = 0.0
 
             for currVertexNr, currVertexPt in enumerate(currRestrictionGeom.asPolyline()):
 
@@ -1127,14 +1128,18 @@ class TOMsSnapTrace:
 
                 # add the vertex - check first to see if it duplicates the previous point
 
+                distCurrVertex = currRestrictionGeom.lineLocatePoint(QgsGeometry.fromPoint(currVertexPt))
+
                 if countNewVertices > 0:
-                    if not self.duplicatePoint(newGeometryCoordsList[countNewVertices-1], currVertexPt):
+                    if not self.duplicatePoint(newGeometryCoordsList[countNewVertices-1], currVertexPt) and distCurrVertex > distLastVertex:
                         newGeometryCoordsList.append(currVertexPt)
                         countNewVertices = countNewVertices + 1
 
                 else:
                     newGeometryCoordsList.append(currVertexPt)
                     countNewVertices = countNewVertices + 1
+
+                distLastVertex = distCurrVertex
 
             # Insert Vertex B. This is the final point in the line - check for duplication ...
             """if self.duplicatePoint(currVertexPt, newGeometryCoordsList[-1]) and countNewVertices > 1:
