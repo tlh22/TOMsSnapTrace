@@ -32,6 +32,39 @@ import resources
 from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 import os.path, math
 
+"""
+from qgis.PyQt.QtWidgets import (
+    QMessageBox,
+    QAction,
+    QDialogButtonBox,
+    QLabel,
+    QDockWidget
+)
+
+from qgis.PyQt.QtGui import (
+    QIcon,
+    QPixmap
+)
+
+from qgis.PyQt.QtCore import (
+    QObject, QTimer, pyqtSignal,
+    QTranslator,
+    QSettings,
+    QCoreApplication,
+    qVersion
+)
+
+from qgis.core import (
+    QgsExpressionContextUtils,
+    QgsExpression,
+    QgsFeatureRequest,
+    # QgsMapLayerRegistry,
+    QgsMessageLog, QgsFeature, QgsGeometry,
+    QgsTransaction, QgsTransactionGroup,
+    QgsProject,
+    QgsApplication
+)
+"""
 DUPLICATE_POINT_DISTANCE = 0.02
 
 class TOMsSnapTrace:
@@ -236,7 +269,7 @@ class TOMsSnapTrace:
             removeDuplicatePoints = False
             snapNodesToGNSS = False
             snapNodesTogether = False
-            checkOverlaps = False
+            checkOverlapOption = False
             snapVerticesToKerb = False
             traceKerbline = False
             removePointsOutsideTolerance = False
@@ -254,7 +287,7 @@ class TOMsSnapTrace:
                 snapNodesTogether = True
 
             if self.dlg.rb_checkOverlaps.isChecked():
-                checkOverlaps = True
+                checkOverlapOption = True
 
             if self.dlg.rb_snapVerticesToKerb.isChecked():
                 snapVerticesToKerb = True
@@ -262,8 +295,8 @@ class TOMsSnapTrace:
             if self.dlg.rb_traceKerbline.isChecked():
                 traceKerbline = True
 
-            if self.dlg.rb_removePointsOutsideTolerance.isChecked():
-                removePointsOutsideTolerance = True
+            """if self.dlg.rb_removePointsOutsideTolerance.isChecked():
+                removePointsOutsideTolerance = True"""
 
             # Snap nodes to GNSS points ...
             # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
@@ -313,12 +346,9 @@ class TOMsSnapTrace:
                     QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
                     self.snapNodesL(Lines, Lines, tolerance)
 
-            if checkOverlaps:
-
+            if checkOverlapOption:
                 QgsMessageLog.logMessage("********** checking overlaps ...", tag="TOMs panel")
-
                 for currRestrictionLayer in listRestrictionLayers:
-
                     self.checkOverlaps (currRestrictionLayer, tolerance)
 
             if snapVerticesToKerb:
@@ -1710,7 +1740,7 @@ class TOMsSnapTrace:
 
         """ This is really to check whether or not there is a problem with the trace tool """
 
-        QgsMessageLog.logMessage("In TraceRestriction2", tag="TOMs panel")
+        QgsMessageLog.logMessage("In checkOverlaps " + sourceLineLayer.name(), tag="TOMs panel")
 
         editStartStatus = sourceLineLayer.startEditing()
 
@@ -1743,12 +1773,13 @@ class TOMsSnapTrace:
             currRestrictionPtsList = currRestrictionGeom.asPolyline()
             nrVerticesInCurrRestriction = len(currRestrictionPtsList)
 
+            currVertexNr = 1
+            vertexA = currRestrictionPtsList[0]
+            shapeChanged = False
+
             QgsMessageLog.logMessage("In checkOverlaps. nrVertices: " + str(nrVerticesInCurrRestriction), tag = "TOMs panel")
 
             # Now, consider each vertex of the sourceLineLayer in turn - and create new geometry
-
-            currVertexNr = 1
-            vertexA = currRestrictionPtsList[0]
 
             while currVertexNr < (nrVerticesInCurrRestriction-1):
 
@@ -1762,7 +1793,9 @@ class TOMsSnapTrace:
                     # do not want currVertex within new restriction
                     currRestrictionPtsList.remove(currRestrictionPtsList[currVertexNr])
                     nrVerticesInCurrRestriction = len(currRestrictionPtsList)
-
+                    shapeChanged = True
+                    QgsMessageLog.logMessage("In checkOverlaps. removing vertex" + str(currVertexNr),
+                                             tag="TOMs panel")
                     if currVertexNr > 1:
                         currVertexNr = currVertexNr - 1
 
@@ -1773,9 +1806,15 @@ class TOMsSnapTrace:
                     vertexA = vertexB
                     currVertexNr = currVertexNr + 1
 
-            newShape = QgsGeometry.fromPolyline(currRestrictionPtsList)
-            sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+            if shapeChanged:
+                QgsMessageLog.logMessage("In checkOverlaps. changes written ... ",
+                                         tag="TOMs panel")
+                newShape = QgsGeometry.fromPolyline(currRestrictionPtsList)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
 
+
+        QgsMessageLog.logMessage("In checkOverlaps. Now finished layer ... ",
+                                         tag="TOMs panel")
         editCommitStatus = False
 
         if editCommitStatus is False:
