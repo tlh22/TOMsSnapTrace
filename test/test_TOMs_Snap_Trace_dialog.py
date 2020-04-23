@@ -14,9 +14,44 @@ __copyright__ = 'Copyright 2017, TH'
 
 import unittest
 
-from PyQt4.QtGui import QDialogButtonBox, QDialog
+#from PyQt4.QtGui import QDialogButtonBox, QDialog
+from qgis.PyQt.QtWidgets import (
+    QMessageBox,
+    QAction,
+    QDialogButtonBox,
+    QLabel,
+    QDockWidget, QDialog
+)
 
-from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
+from qgis.PyQt.QtGui import (
+    QIcon,
+    QPixmap
+)
+
+from qgis.PyQt.QtCore import (
+    QObject, QTimer, pyqtSignal,
+    QTranslator,
+    QSettings,
+    QCoreApplication,
+    qVersion
+)
+
+from qgis.core import (
+    QgsExpressionContextUtils,
+    QgsExpression,
+    QgsFeatureRequest,
+    # QgsMapLayerRegistry,
+    QgsMessageLog, QgsFeature, QgsGeometry,
+    QgsTransaction, QgsTransactionGroup,
+    QgsProject,
+    QgsApplication, QgsRectangle, QgsPoint
+)
+
+from qgis.analysis import (
+    QgsVectorLayerDirector, QgsNetworkDistanceStrategy, QgsGraphBuilder, QgsGraphAnalyzer
+)
+
+from ..TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 
 from utilities import get_qgis_app
 QGIS_APP = get_qgis_app()
@@ -47,6 +82,25 @@ class TOMsSnapTraceDialogTest(unittest.TestCase):
         button.click()
         result = self.dialog.result()
         self.assertEqual(result, QDialog.Rejected)
+
+    def testFindOverlap(self):
+
+        """
+
+        2-+-+-+-+-1+-+-+-+-0+-+-+-+-3
+
+        """
+
+
+        polyline = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(0, 0), QgsPointXY(-1, 0), QgsPointXY(-2, 0), QgsPointXY(1, 0)]
+        )
+
+        result = lineOverlaps(QgsPointXY(0, 0), QgsPointXY(-1, 0), QgsPointXY(-2, 0))
+        self.assertfalse(result)
+
+        result = lineOverlaps(QgsPointXY(-1, 0), QgsPointXY(-2, 0), QgsPointXY(1, 0))
+        self.assertTrue(result)
 
 if __name__ == "__main__":
     suite = unittest.makeSuite(TOMsSnapTraceDialogTest)

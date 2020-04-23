@@ -23,14 +23,15 @@
 
 import os
 
-from PyQt4 import QtGui, uic
+from qgis.PyQt import uic
+from qgis.PyQt import QtWidgets
 from qgis.gui import QgsMapLayerComboBox
 
 FORM_CLASS, _ = uic.loadUiType(os.path.join(
     os.path.dirname(__file__), 'TOMs_Snap_Trace_dialog_base.ui'))
 
 
-class TOMsSnapTraceDialog(QtGui.QDialog, FORM_CLASS):
+class TOMsSnapTraceDialog(QtWidgets.QDialog, FORM_CLASS):
     def __init__(self, parent=None):
         """Constructor."""
         super(TOMsSnapTraceDialog, self).__init__(parent)

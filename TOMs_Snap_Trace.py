@@ -20,19 +20,16 @@
  *                                                                         *
  ***************************************************************************/
 """
-from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication
-from PyQt4.QtGui import QAction, QIcon, QMessageBox
 
-from qgis.core import *
-from qgis.gui import *
 
 # Initialize Qt resources from file resources.py
-import resources
+from .resources import *
+
 # Import the code for the dialog
-from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
+from .TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 import os.path, math
 
-"""
+
 from qgis.PyQt.QtWidgets import (
     QMessageBox,
     QAction,
@@ -62,9 +59,12 @@ from qgis.core import (
     QgsMessageLog, QgsFeature, QgsGeometry,
     QgsTransaction, QgsTransactionGroup,
     QgsProject,
-    QgsApplication
+    QgsApplication, QgsRectangle, QgsPoint
 )
-"""
+
+from qgis.analysis import (
+    QgsVectorLayerDirector, QgsNetworkDistanceStrategy, QgsGraphBuilder, QgsGraphAnalyzer
+)
 DUPLICATE_POINT_DISTANCE = 0.02
 
 class TOMsSnapTrace:
@@ -131,44 +131,6 @@ class TOMsSnapTrace:
         status_tip=None,
         whats_this=None,
         parent=None):
-        """Add a toolbar icon to the toolbar.
-
-        :param icon_path: Path to the icon for this action. Can be a resource
-            path (e.g. ':/plugins/foo/bar.png') or a normal file system path.
-        :type icon_path: str
-
-        :param text: Text that should be shown in menu items for this action.
-        :type text: str
-
-        :param callback: Function to be called when the action is triggered.
-        :type callback: function
-
-        :param enabled_flag: A flag indicating if the action should be enabled
-            by default. Defaults to True.
-        :type enabled_flag: bool
-
-        :param add_to_menu: Flag indicating whether the action should also
-            be added to the menu. Defaults to True.
-        :type add_to_menu: bool
-
-        :param add_to_toolbar: Flag indicating whether the action should also
-            be added to the toolbar. Defaults to True.
-        :type add_to_toolbar: bool
-
-        :param status_tip: Optional text to show in a popup when mouse pointer
-            hovers over the action.
-        :type status_tip: str
-
-        :param parent: Parent widget for the new action. Defaults None.
-        :type parent: QWidget
-
-        :param whats_this: Optional text to show in the status bar when the
-            mouse pointer hovers over the action.
-
-        :returns: The action that was created. Note that the action is also
-            added to self.actions list.
-        :rtype: QAction
-        """
 
         # Create the dialog (after translation) and keep reference
         self.dlg = TOMsSnapTraceDialog()
@@ -223,16 +185,6 @@ class TOMsSnapTrace:
         # show the dialog
         self.dlg.show()
 
-        """layers = QgsMapLayerRegistry.instance().mapLayers().values()
-        for layer in layers:
-            if layer.type() == QgsMapLayer.VectorLayer:
-                self.dlg.baysLayer.addItem( layer.name(), layer )
-                self.dlg.linesLayer.addItem( layer.name(), layer )
-                self.dlg.gnssPointsLayer.addItem( layer.name(), layer )
-                self.dlg.kerbLayer.addItem(layer.name(), layer)
-                # self.dlg.layerValues.addItem( layer.name(), layer )"""
-
-
         # Run the dialog event loop
         result = self.dlg.exec_()
         # See if OK was pressed
@@ -251,13 +203,6 @@ class TOMsSnapTrace:
 
             indexsKerbLayer = self.dlg.kerbLayer.currentIndex()
             Kerbline = self.dlg.kerbLayer.currentLayer()
-
-            #tolerance =  float(self.dlg.fld_Tolerance.text())
-
-            """Bays = QgsMapLayerRegistry.instance().mapLayersByName("Bays")[0]
-            Lines = QgsMapLayerRegistry.instance().mapLayersByName("Lines")[0]
-            GNSS_Points = QgsMapLayerRegistry.instance().mapLayersByName("gnssPts_180117")[0]
-            Kerbline = QgsMapLayerRegistry.instance().mapLayersByName("EDI_RoadCasement_Polyline")[0]"""
 
             if self.dlg.fld_Tolerance.text():
                 tolerance = float(self.dlg.fld_Tolerance.text())
@@ -297,11 +242,6 @@ class TOMsSnapTrace:
 
             """if self.dlg.rb_removePointsOutsideTolerance.isChecked():
                 removePointsOutsideTolerance = True"""
-
-            # Snap nodes to GNSS points ...
-            # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
-
-            # Set up list of layers to be processed
 
             if Bays == Lines:
                 listRestrictionLayers = [Bays]
@@ -380,9 +320,6 @@ class TOMsSnapTrace:
                 QgsMessageLog.logMessage("********** removePointsOutsideTolerance ...", tag="TOMs panel")
 
                 self.removePointsOutsideTolerance (Bays, Kerbline, tolerance)
-
-
-
 
     def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
 
@@ -1667,7 +1604,7 @@ class TOMsSnapTrace:
             # Now replace the orginal geometry of the current restriction with the new geometry
             #currRestriction.setGeometry(QgsGeometry.fromPolyline(newGeometryCoordsList))
 
-            if countNewVertices <> nrVerticesInCurrRestriction and countNewVertices > 1:
+            if countNewVertices != nrVerticesInCurrRestriction and countNewVertices > 1:
                 newShape = QgsGeometry.fromPolyline(newGeometryCoordsList)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
                 QgsMessageLog.logMessage("In removeDuplicates2. " + str(currRestriction.attribute("GeometryID")) +
@@ -1786,7 +1723,7 @@ class TOMsSnapTrace:
                 vertexB = currRestrictionPtsList[currVertexNr]
                 vertexC = currRestrictionPtsList[currVertexNr + 1]
 
-                if self.LineOverlaps(vertexA, vertexB, vertexC):
+                if self.lineOverlaps(vertexA, vertexB, vertexC):
 
                     QgsMessageLog.logMessage("In checkOverlaps. found overlaps at " + str(currVertexNr),
                                              tag="TOMs panel")
@@ -1837,8 +1774,8 @@ class TOMsSnapTrace:
 
         if dotProduct < 0:
             # candidate for overlap
-            lineAB_Geom = QgsGeometry.fromPolyline([vertexA, vertexB])
-            lineBC_Geom = QgsGeometry.fromPolyline([vertexB, vertexC])
+            lineAB_Geom = QgsGeometry.fromPolyline([QgsPoint(vertexA), QgsPoint(vertexB)])
+            lineBC_Geom = QgsGeometry.fromPolyline([QgsPoint(vertexB), QgsPoint(vertexC)])
 
             if lineBC_Geom.overlaps(lineAB_Geom):
                 return True
