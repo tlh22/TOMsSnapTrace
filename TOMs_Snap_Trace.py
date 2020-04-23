@@ -21,14 +21,9 @@
  ***************************************************************************/
 """
 
-
-# Initialize Qt resources from file resources.py
-from .resources import *
-
-# Import the code for the dialog
-from .TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 import os.path, math
-
+import sys
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
 
 from qgis.PyQt.QtWidgets import (
     QMessageBox,
@@ -59,12 +54,20 @@ from qgis.core import (
     QgsMessageLog, QgsFeature, QgsGeometry,
     QgsTransaction, QgsTransactionGroup,
     QgsProject,
-    QgsApplication, QgsRectangle, QgsPoint
+    QgsApplication, QgsRectangle, QgsPoint, QgsWkbTypes
 )
 
 from qgis.analysis import (
     QgsVectorLayerDirector, QgsNetworkDistanceStrategy, QgsGraphBuilder, QgsGraphAnalyzer
 )
+
+
+# Initialize Qt resources from file resources.py
+from resources import *
+
+# Import the code for the dialog
+from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
+
 DUPLICATE_POINT_DISTANCE = 0.02
 
 class TOMsSnapTrace:
@@ -190,6 +193,7 @@ class TOMsSnapTrace:
         # See if OK was pressed
         if result:
 
+            utils = SnapTraceUtils()
             # Set up variables to layers - maybe obtained from form ??
 
             indexBaysLayer = self.dlg.baysLayer.currentIndex()
@@ -261,43 +265,40 @@ class TOMsSnapTrace:
                 QgsMessageLog.logMessage("********** Removing duplicate points", tag="TOMs panel")
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.removeDuplicatePoints(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
+                    utils.removeDuplicatePoints(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
 
             if snapNodesToGNSS:
 
                 QgsMessageLog.logMessage("********** Snapping nodes to GNSS points", tag="TOMs panel")
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
+                    utils.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
 
             if snapNodesTogether:
                 # Snap end points together ...  (Perhaps could use a double loop here ...)
 
                 if Bays != Lines:
                     QgsMessageLog.logMessage("********** Snapping lines to bays ...", tag="TOMs panel")
-                    self.snapNodesL(Lines, Bays, tolerance)
+                    utils.snapNodesL(Lines, Bays, tolerance)
 
                 QgsMessageLog.logMessage("********** Snapping bays to bays ...", tag="TOMs panel")
                 self.snapNodesL(Bays, Bays, tolerance)
 
                 if Bays != Lines:
                     QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
-                    self.snapNodesL(Lines, Lines, tolerance)
+                    utils.snapNodesL(Lines, Lines, tolerance)
 
             if checkOverlapOption:
                 QgsMessageLog.logMessage("********** checking overlaps ...", tag="TOMs panel")
                 for currRestrictionLayer in listRestrictionLayers:
-                    self.checkOverlaps (currRestrictionLayer, tolerance)
+                    utils.checkSelfOverlaps (currRestrictionLayer, tolerance)
 
             if snapVerticesToKerb:
 
                 QgsMessageLog.logMessage("********** Snapping vertices to kerb ...", tag="TOMs panel")
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.snapVertices (currRestrictionLayer, Kerbline, tolerance)
+                    utils.snapVertices (currRestrictionLayer, Kerbline, tolerance)
 
             if traceKerbline:
 
@@ -307,8 +308,7 @@ class TOMsSnapTrace:
                 QgsMessageLog.logMessage("********** Tracing kerb ...", tag="TOMs panel")
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)
+                    utils.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)
 
             # Set up all the layers - in init ...
 
@@ -318,8 +318,12 @@ class TOMsSnapTrace:
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
 
                 QgsMessageLog.logMessage("********** removePointsOutsideTolerance ...", tag="TOMs panel")
+                utils.removePointsOutsideTolerance (Bays, Kerbline, tolerance)
 
-                self.removePointsOutsideTolerance (Bays, Kerbline, tolerance)
+class SnapTraceUtils():
+
+    def __init__(self):
+        pass
 
     def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
 
@@ -1673,16 +1677,16 @@ class TOMsSnapTrace:
                                                 sourceLineLayer.commitErrors()),
                                             QMessageBox.Ok)
 
-    def checkOverlaps(self, sourceLineLayer, tolerance):
+    def checkSelfOverlaps(self, sourceLineLayer, tolerance):
 
         """ This is really to check whether or not there is a problem with the trace tool """
 
-        QgsMessageLog.logMessage("In checkOverlaps " + sourceLineLayer.name(), tag="TOMs panel")
+        QgsMessageLog.logMessage("In checkSelfOverlaps " + sourceLineLayer.name(), tag="TOMs panel")
 
         editStartStatus = sourceLineLayer.startEditing()
 
         reply = QMessageBox.information(None, "Check",
-                                        "checkOverlaps: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                        "checkSelfOverlaps: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
                                             editStartStatus),
                                         QMessageBox.Ok)
 
@@ -1690,7 +1694,7 @@ class TOMsSnapTrace:
             # save the active layer
 
             reply = QMessageBox.information(None, "Error",
-                                            "checkOverlaps: Not able to start transaction on " + sourceLineLayer.name(),
+                                            "checkSelfOverlaps: Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
             return
 
@@ -1698,55 +1702,20 @@ class TOMsSnapTrace:
 
             # get nearest snapLineLayer feature (using the second vertex as the test)
 
-            QgsMessageLog.logMessage("In checkOverlaps. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
+            QgsMessageLog.logMessage("In checkSelfOverlaps. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
 
             currRestrictionGeom = currRestriction.geometry()
             if currRestrictionGeom.isEmpty():
                 QgsMessageLog.logMessage(
-                    "In TraceRestriction2. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    "In checkSelfOverlaps. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
                     tag="TOMs panel")
                 continue
 
-            currRestrictionPtsList = currRestrictionGeom.asPolyline()
-            nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+            newShape = self.checkLineForSelfOverlap(currRestrictionGeom)
 
-            currVertexNr = 1
-            vertexA = currRestrictionPtsList[0]
-            shapeChanged = False
-
-            QgsMessageLog.logMessage("In checkOverlaps. nrVertices: " + str(nrVerticesInCurrRestriction), tag = "TOMs panel")
-
-            # Now, consider each vertex of the sourceLineLayer in turn - and create new geometry
-
-            while currVertexNr < (nrVerticesInCurrRestriction-1):
-
-                vertexB = currRestrictionPtsList[currVertexNr]
-                vertexC = currRestrictionPtsList[currVertexNr + 1]
-
-                if self.lineOverlaps(vertexA, vertexB, vertexC):
-
-                    QgsMessageLog.logMessage("In checkOverlaps. found overlaps at " + str(currVertexNr),
-                                             tag="TOMs panel")
-                    # do not want currVertex within new restriction
-                    currRestrictionPtsList.remove(currRestrictionPtsList[currVertexNr])
-                    nrVerticesInCurrRestriction = len(currRestrictionPtsList)
-                    shapeChanged = True
-                    QgsMessageLog.logMessage("In checkOverlaps. removing vertex" + str(currVertexNr),
-                                             tag="TOMs panel")
-                    if currVertexNr > 1:
-                        currVertexNr = currVertexNr - 1
-
-                    vertexA = currRestrictionPtsList[currVertexNr-1]
-
-                else:
-
-                    vertexA = vertexB
-                    currVertexNr = currVertexNr + 1
-
-            if shapeChanged:
-                QgsMessageLog.logMessage("In checkOverlaps. changes written ... ",
+            if newShape:
+                QgsMessageLog.logMessage("In checkSelfOverlaps. changes written ... ",
                                          tag="TOMs panel")
-                newShape = QgsGeometry.fromPolyline(currRestrictionPtsList)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
 
 
@@ -1763,6 +1732,55 @@ class TOMsSnapTrace:
 
     """ ***** """
 
+    def checkLineForSelfOverlap(self, currRestrictionGeom):
+
+        currRestrictionPtsList = currRestrictionGeom.asPolyline()
+        nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+
+        currVertexNr = 1
+        vertexA = currRestrictionPtsList[0]
+        shapeChanged = False
+
+        #QgsMessageLog.logMessage("In checkLineForSelfOverlap. nrVertices: " + str(nrVerticesInCurrRestriction), tag="TOMs panel")
+        #print ('Nr vertices: {}'.format(nrVerticesInCurrRestriction))
+        # Now, consider each vertex of the sourceLineLayer in turn - and create new geometry
+
+        while currVertexNr < (nrVerticesInCurrRestriction - 1):
+
+            vertexB = currRestrictionPtsList[currVertexNr]
+            vertexC = currRestrictionPtsList[currVertexNr + 1]
+
+            #print (vertexA, vertexB, vertexC)
+            if self.lineOverlaps(vertexA, vertexB, vertexC):
+
+                #QgsMessageLog.logMessage("In checkLineForSelfOverlap. found overlaps at " + str(currVertexNr),                                          tag="TOMs panel")
+                #print ('In checkLineForSelfOverlap. found overlaps at {}'.format(currVertexNr))
+                # do not want currVertex within new restriction
+                currRestrictionPtsList.remove(currRestrictionPtsList[currVertexNr])
+                nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+                shapeChanged = True
+                #QgsMessageLog.logMessage("In checkLineForSelfOverlap. removing vertex" + str(currVertexNr),
+                #                         tag="TOMs panel")
+                #print ('In checkLineForSelfOverlap. removing vertex {}'.format(currVertexNr))
+                if currVertexNr > 1:
+                    currVertexNr = currVertexNr - 1
+
+                vertexA = currRestrictionPtsList[currVertexNr - 1]
+
+            else:
+
+                vertexA = vertexB
+                currVertexNr = currVertexNr + 1
+
+        if shapeChanged:
+            #QgsMessageLog.logMessage("In checkLineForSelfOverlap. changes written ... ",
+            #                         tag="TOMs panel")
+            #print ('In checkLineForSelfOverlap. changes written ...')
+            newShape = QgsGeometry.fromPolylineXY(currRestrictionPtsList)
+            return newShape
+
+        return None
+
     def lineOverlaps(self, vertexA, vertexB, vertexC):
 
         prevDeltaX = vertexB.x() - vertexA.x()
@@ -1777,7 +1795,9 @@ class TOMsSnapTrace:
             lineAB_Geom = QgsGeometry.fromPolyline([QgsPoint(vertexA), QgsPoint(vertexB)])
             lineBC_Geom = QgsGeometry.fromPolyline([QgsPoint(vertexB), QgsPoint(vertexC)])
 
-            if lineBC_Geom.overlaps(lineAB_Geom):
+            intersectGeom = lineBC_Geom.intersection(lineAB_Geom)
+
+            if intersectGeom.type() == QgsWkbTypes.LineGeometry:
                 return True
 
         return False
