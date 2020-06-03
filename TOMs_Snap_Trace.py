@@ -88,7 +88,7 @@ class TOMsSnapTrace:
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
         # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
+        """locale = QSettings().value('locale/userLocale')[0:2]
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',
@@ -99,7 +99,7 @@ class TOMsSnapTrace:
             self.translator.load(locale_path)
 
             if qVersion() > '4.3.3':
-                QCoreApplication.installTranslator(self.translator)
+                QCoreApplication.installTranslator(self.translator)"""
 
 
         # Declare instance attributes
@@ -224,6 +224,7 @@ class TOMsSnapTrace:
             snapVerticesToKerb = False
             traceKerbline = False
             removePointsOutsideTolerance = False
+            mergeGeometries = False
 
             if self.dlg.rb_removeShortLines.isChecked():
                 removeShortLines = True
