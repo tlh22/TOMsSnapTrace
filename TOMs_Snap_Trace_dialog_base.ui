@@ -7,7 +7,7 @@
     <x>0</x>
     <y>0</y>
     <width>427</width>
-    <height>375</height>
+    <height>404</height>
    </rect>
   </property>
   <property name="windowTitle">
@@ -122,7 +122,7 @@
      </property>
     </widget>
    </item>
-   <item row="17" column="0" colspan="2">
+   <item row="18" column="0" colspan="2">
     <widget class="QDialogButtonBox" name="button_box">
      <property name="orientation">
       <enum>Qt::Horizontal</enum>
@@ -154,13 +154,20 @@
      </property>
     </widget>
    </item>
+   <item row="17" column="0">
+    <widget class="QRadioButton" name="rb_mergeGeometries">
+     <property name="text">
+      <string>Merge restrictions with same attributes</string>
+     </property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <customwidgets>
   <customwidget>
    <class>QgsMapLayerComboBox</class>
    <extends>QComboBox</extends>
-   <header>qgis.gui</header>
+   <header>qgsmaplayercombobox.h</header>
   </customwidget>
  </customwidgets>
  <resources/>

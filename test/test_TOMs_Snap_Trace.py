@@ -67,8 +67,6 @@ from TOMs_Snap_Trace import TOMsSnapTrace, SnapTraceUtils
 from utilities import get_qgis_app
 QGIS_APP = get_qgis_app()
 
-
-
 """qgs = QgsApplication([], False)
 QgsApplication.setPrefixPath("C:\QGIS_310\apps\qgis-ltr", True)
 QgsApplication.initQgis()"""
@@ -434,10 +432,16 @@ class TOMsSnapTraceTest(unittest.TestCase):
         result = self.testClass.mergeRestrictionGeometries(testLineString1, testLineString2A)
         self.assertEqual(result.asWkt(), 'LineString (0 0, 1 0, 1 1)')
 
-        print ('## Layer feature count: {}; {}'.format(testLayer.featureCount(), testProvider.featureCount()))
-        self.already_processed = []
-        result = self.testClass.checkConnectedRestrictionsWithSameAttributes(testFeature1, testLayer, checkFieldList)
-        self.assertEqual(result.asWkt(), 'LineString (0 0, 1 0, 1 1)')
+        testLayer.updateFields()
+
+        print ('-------------------------------------')
+        #already_processed = []
+        #already_processed.append(testFeature1["GeometryID"])
+        result = self.testClass.checkConnectedRestrictionsWithSameAttributes(testFeature1, testLayer, checkFieldList, [testFeature1["GeometryID"]])
+        self.assertEqual(result.asWkt(), 'LineString (0 0, 1 0, 1 1, 2 1)')
+
+        print ('Feature count: {}'.format(testLayer.featureCount()))
+        self.assertEqual(testLayer.featureCount(), 2)
 
     def testCheckRestrictionGeometryForTracedVertices(self):
 
