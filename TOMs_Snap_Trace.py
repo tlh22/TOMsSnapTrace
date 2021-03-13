@@ -20,19 +20,59 @@
  *                                                                         *
  ***************************************************************************/
 """
-from PyQt4.QtCore import QSettings, QTranslator, qVersion, QCoreApplication
-from PyQt4.QtGui import QAction, QIcon, QMessageBox
 
-from qgis.core import *
-from qgis.gui import *
+import os.path, math
+import sys
+sys.path.append(os.path.dirname(os.path.realpath(__file__)))
+
+from qgis.PyQt.QtWidgets import (
+    QMessageBox,
+    QAction,
+    QDialogButtonBox,
+    QLabel,
+    QDockWidget
+)
+
+from qgis.PyQt.QtGui import (
+    QIcon,
+    QPixmap
+)
+
+from qgis.PyQt.QtCore import (
+    QObject, QTimer, pyqtSignal,
+    QTranslator,
+    QSettings,
+    QCoreApplication,
+    qVersion
+)
+
+from qgis.core import (
+    Qgis,
+    QgsExpressionContextUtils,
+    QgsExpression,
+    QgsFeatureRequest,
+    # QgsMapLayerRegistry,
+    QgsMessageLog, QgsFeature, QgsGeometry, QgsGeometryUtils,
+    QgsTransaction, QgsTransactionGroup,
+    QgsProject,
+    QgsApplication, QgsRectangle, QgsPoint, QgsWkbTypes, QgsPointXY,
+    edit
+)
+
+from qgis.analysis import (
+    QgsVectorLayerDirector, QgsNetworkDistanceStrategy, QgsGraphBuilder, QgsGraphAnalyzer
+)
+
 
 # Initialize Qt resources from file resources.py
-import resources
+from resources import *
+
 # Import the code for the dialog
 from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
-import os.path, math
+from TOMs.core.TOMsMessageLog import TOMsMessageLog
 
 DUPLICATE_POINT_DISTANCE = 0.02
+SMALL_ANGLE_RADIANS = 0.0001
 
 class TOMsSnapTrace:
     """QGIS Plugin Implementation."""
@@ -50,7 +90,7 @@ class TOMsSnapTrace:
         # initialize plugin directory
         self.plugin_dir = os.path.dirname(__file__)
         # initialize locale
-        locale = QSettings().value('locale/userLocale')[0:2]
+        """locale = QSettings().value('locale/userLocale')[0:2]
         locale_path = os.path.join(
             self.plugin_dir,
             'i18n',
@@ -61,7 +101,7 @@ class TOMsSnapTrace:
             self.translator.load(locale_path)
 
             if qVersion() > '4.3.3':
-                QCoreApplication.installTranslator(self.translator)
+                QCoreApplication.installTranslator(self.translator)"""
 
 
         # Declare instance attributes
@@ -98,44 +138,6 @@ class TOMsSnapTrace:
         status_tip=None,
         whats_this=None,
         parent=None):
-        """Add a toolbar icon to the toolbar.
-
-        :param icon_path: Path to the icon for this action. Can be a resource
-            path (e.g. ':/plugins/foo/bar.png') or a normal file system path.
-        :type icon_path: str
-
-        :param text: Text that should be shown in menu items for this action.
-        :type text: str
-
-        :param callback: Function to be called when the action is triggered.
-        :type callback: function
-
-        :param enabled_flag: A flag indicating if the action should be enabled
-            by default. Defaults to True.
-        :type enabled_flag: bool
-
-        :param add_to_menu: Flag indicating whether the action should also
-            be added to the menu. Defaults to True.
-        :type add_to_menu: bool
-
-        :param add_to_toolbar: Flag indicating whether the action should also
-            be added to the toolbar. Defaults to True.
-        :type add_to_toolbar: bool
-
-        :param status_tip: Optional text to show in a popup when mouse pointer
-            hovers over the action.
-        :type status_tip: str
-
-        :param parent: Parent widget for the new action. Defaults None.
-        :type parent: QWidget
-
-        :param whats_this: Optional text to show in the status bar when the
-            mouse pointer hovers over the action.
-
-        :returns: The action that was created. Note that the action is also
-            added to self.actions list.
-        :rtype: QAction
-        """
 
         # Create the dialog (after translation) and keep reference
         self.dlg = TOMsSnapTraceDialog()
@@ -190,21 +192,12 @@ class TOMsSnapTrace:
         # show the dialog
         self.dlg.show()
 
-        """layers = QgsMapLayerRegistry.instance().mapLayers().values()
-        for layer in layers:
-            if layer.type() == QgsMapLayer.VectorLayer:
-                self.dlg.baysLayer.addItem( layer.name(), layer )
-                self.dlg.linesLayer.addItem( layer.name(), layer )
-                self.dlg.gnssPointsLayer.addItem( layer.name(), layer )
-                self.dlg.kerbLayer.addItem(layer.name(), layer)
-                # self.dlg.layerValues.addItem( layer.name(), layer )"""
-
-
         # Run the dialog event loop
         result = self.dlg.exec_()
         # See if OK was pressed
         if result:
 
+            utils = SnapTraceUtils()
             # Set up variables to layers - maybe obtained from form ??
 
             indexBaysLayer = self.dlg.baysLayer.currentIndex()
@@ -219,25 +212,21 @@ class TOMsSnapTrace:
             indexsKerbLayer = self.dlg.kerbLayer.currentIndex()
             Kerbline = self.dlg.kerbLayer.currentLayer()
 
-            #tolerance =  float(self.dlg.fld_Tolerance.text())
-
-            """Bays = QgsMapLayerRegistry.instance().mapLayersByName("Bays")[0]
-            Lines = QgsMapLayerRegistry.instance().mapLayersByName("Lines")[0]
-            GNSS_Points = QgsMapLayerRegistry.instance().mapLayersByName("gnssPts_180117")[0]
-            Kerbline = QgsMapLayerRegistry.instance().mapLayersByName("EDI_RoadCasement_Polyline")[0]"""
-
             if self.dlg.fld_Tolerance.text():
                 tolerance = float(self.dlg.fld_Tolerance.text())
             else:
                 tolerance = 0.5
-            QgsMessageLog.logMessage("Tolerance = " + str(tolerance), tag="TOMs panel")
+            TOMsMessageLog.logMessage("Tolerance = " + str(tolerance),  level=Qgis.Info)
 
             removeShortLines = False
             removeDuplicatePoints = False
             snapNodesToGNSS = False
             snapNodesTogether = False
+            checkOverlapOption = False
             snapVerticesToKerb = False
             traceKerbline = False
+            removePointsOutsideTolerance = False
+            mergeGeometries = False
 
             if self.dlg.rb_removeShortLines.isChecked():
                 removeShortLines = True
@@ -251,16 +240,20 @@ class TOMsSnapTrace:
             if self.dlg.rb_snapNodesTogether.isChecked():
                 snapNodesTogether = True
 
+            if self.dlg.rb_checkOverlaps.isChecked():
+                checkOverlapOption = True
+
             if self.dlg.rb_snapVerticesToKerb.isChecked():
                 snapVerticesToKerb = True
 
             if self.dlg.rb_traceKerbline.isChecked():
                 traceKerbline = True
 
-            # Snap nodes to GNSS points ...
-            # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
+            if self.dlg.rb_mergeGeometries.isChecked():
+                mergeGeometries = True
 
-            # Set up list of layers to be processed
+            """if self.dlg.rb_removePointsOutsideTolerance.isChecked():
+                removePointsOutsideTolerance = True"""
 
             if Bays == Lines:
                 listRestrictionLayers = [Bays]
@@ -269,67 +262,94 @@ class TOMsSnapTrace:
 
             if removeShortLines:
 
-                QgsMessageLog.logMessage("********** Removing short lines", tag="TOMs panel")
+                TOMsMessageLog.logMessage("********** Removing short lines", level=Qgis.Info)
 
-                """for currRestrictionLayer in listRestrictionLayers:
+                for currRestrictionLayer in listRestrictionLayers:
 
-                    self.removeShortLines(currRestrictionLayer, tolerance)"""
+                    self.removeShortLines(currRestrictionLayer, tolerance)
 
             if removeDuplicatePoints:
 
-                QgsMessageLog.logMessage("********** Removing duplicate points", tag="TOMs panel")
+                TOMsMessageLog.logMessage("********** Removing duplicate points", level=Qgis.Info)
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.removeDuplicatePoints(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
+                    utils.removeDuplicatePoints(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
 
             if snapNodesToGNSS:
 
-                QgsMessageLog.logMessage("********** Snapping nodes to GNSS points", tag="TOMs panel")
+                TOMsMessageLog.logMessage("********** Snapping nodes to GNSS points", level=Qgis.Info)
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
+                    utils.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
 
             if snapNodesTogether:
                 # Snap end points together ...  (Perhaps could use a double loop here ...)
 
                 if Bays != Lines:
-                    QgsMessageLog.logMessage("********** Snapping lines to bays ...", tag="TOMs panel")
-                    self.snapNodesL(Lines, Bays, tolerance)
+                    TOMsMessageLog.logMessage("********** Snapping lines to bays ...", level=Qgis.Info)
+                    utils.snapNodes(Lines, Bays, tolerance)
 
-                QgsMessageLog.logMessage("********** Snapping bays to bays ...", tag="TOMs panel")
-                self.snapNodesL(Bays, Bays, tolerance)
+                TOMsMessageLog.logMessage("********** Snapping bays to bays ...", level=Qgis.Info)
+                utils.snapNodes(Bays, Bays, tolerance)
 
                 if Bays != Lines:
-                    QgsMessageLog.logMessage("********** Snapping lines to lines ...", tag="TOMs panel")
-                    self.snapNodesL(Lines, Lines, tolerance)
+                    TOMsMessageLog.logMessage("********** Snapping lines to lines ...", level=Qgis.Info)
+                    utils.snapNodes(Lines, Lines, tolerance)
+
+            if checkOverlapOption:
+                TOMsMessageLog.logMessage("********** checking overlaps ...", level=Qgis.Info)
+                for currRestrictionLayer in listRestrictionLayers:
+                    utils.checkSelfOverlaps (currRestrictionLayer, tolerance)
 
             if snapVerticesToKerb:
 
-                QgsMessageLog.logMessage("********** Snapping vertices to kerb ...", tag="TOMs panel")
+                TOMsMessageLog.logMessage("********** Snapping vertices to kerb ...", level=Qgis.Info)
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.snapVertices (currRestrictionLayer, Kerbline, tolerance)
+                    utils.snapVertices (currRestrictionLayer, Kerbline, tolerance)
 
             if traceKerbline:
 
                 # Now trace ...
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
 
-                QgsMessageLog.logMessage("********** Tracing kerb ...", tag="TOMs panel")
+                TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Info)
 
                 for currRestrictionLayer in listRestrictionLayers:
-
-                    self.TraceRestriction2 (currRestrictionLayer, Kerbline, tolerance)
+                    utils.TraceRestriction3 (currRestrictionLayer, Kerbline, tolerance)
 
             # Set up all the layers - in init ...
 
- 
-    def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
+            if removePointsOutsideTolerance:
 
-        QgsMessageLog.logMessage("In snapNodes", tag="TOMs panel")
+                # Now trace ...
+                # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
+
+                TOMsMessageLog.logMessage("********** removePointsOutsideTolerance ...", level=Qgis.Info)
+                utils.removePointsOutsideTolerance (Bays, Kerbline, tolerance)
+
+            if mergeGeometries:
+
+                # Now trace ...
+                # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
+
+                TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Info)
+
+                for currRestrictionLayer in listRestrictionLayers:
+                    utils.mergeGeometriesWithSameAttributes (currRestrictionLayer)
+
+            # Set up all the layers - in init ...
+
+
+
+class SnapTraceUtils():
+
+    def __init__(self):
+        pass
+
+        """def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
+
+        TOMsMessageLog.logMessage("In snapNodes", level=Qgis.Info)
 
         editStartStatus = sourceLineLayer.startEditing()
 
@@ -340,7 +360,7 @@ class TOMsSnapTrace:
 
         if editStartStatus is False:
             # save the active layer
-            QgsMessageLog.logMessage("Error: snapNodesP: Not able to start transaction on " + sourceLineLayer.name())
+            TOMsMessageLog.logMessage("Error: snapNodesP: Not able to start transaction on " + sourceLineLayer.name())
             reply = QMessageBox.information(None, "Error",
                                             "SnapNodes: Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
@@ -358,18 +378,18 @@ class TOMsSnapTrace:
             ptsCurrRestriction = currRestriction.geometry().asPolyline()
             currPoint = self.getStartPoint(currRestriction)
             currVertex = 0
-            #QgsMessageLog.logMessage("currPoint geom type: " + str(currPoint.x()), tag="TOMs panel")
+            #TOMsMessageLog.logMessage("currPoint geom type: " + str(currPoint.x()), level=Qgis.Info)
 
             nearestPoint = self.findNearestPointP(currPoint, snapPointLayer, tolerance)   # returned as QgsFeature
 
             if nearestPoint:
                 # Move the vertex
-                QgsMessageLog.logMessage("SnapNodes: Moving start point for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
+                TOMsMessageLog.logMessage("SnapNodes: Moving start point for " + str(currRestriction.attribute("GeometryID")), level=Qgis.Info)
 
                 sourceLineLayer.moveVertex(nearestPoint.geometry().asPoint().x(), nearestPoint.geometry().asPoint().y(), currRestriction.id(), currVertex)
                 # currRestriction.geometry().moveVertex(nearestPoint, currVertex)
-                QgsMessageLog.logMessage("In findNearestPointP: closestPoint {}".format(nearestPoint.geometry().exportToWkt()),
-                                     tag="TOMs panel")
+                TOMsMessageLog.logMessage("In findNearestPointP: closestPoint {}".format(nearestPoint.geometry().exportToWkt()),
+                                     level=Qgis.Info)
 
             currPoint = self.getEndPoint(currRestriction)
 
@@ -377,11 +397,67 @@ class TOMsSnapTrace:
 
             if nearestPoint:
                 # Move the vertex
-                QgsMessageLog.logMessage("SnapNodes: Moving end point " + str(len(ptsCurrRestriction)-1) +
-                                         " for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
+                TOMsMessageLog.logMessage("SnapNodes: Moving end point " + str(len(ptsCurrRestriction)-1) +
+                                         " for " + str(currRestriction.attribute("GeometryID")), level=Qgis.Info)
                 sourceLineLayer.moveVertex(nearestPoint.geometry().asPoint().x(),
                                                       nearestPoint.geometry().asPoint().y(), currRestriction.id(),
                                                     len(ptsCurrRestriction) - 1)
+
+        editCommitStatus = sourceLineLayer.commitChanges()
+
+        #reply = QMessageBox.information(None, "Check",
+        #                                "SnapNodes: Status for commit to " + sourceLineLayer.name() + " is: " + str(
+        #                                    editCommitStatus),
+        #                                QMessageBox.Ok)
+
+        if editCommitStatus is False:
+            # save the active layer
+            TOMsMessageLog.logMessage("Error: snapNodesP: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                sourceLineLayer.commitErrors()))
+            reply = QMessageBox.information(None, "Error",
+                                            "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                sourceLineLayer.commitErrors()),
+                                            QMessageBox.Ok)
+
+        return
+        """
+
+    def snapNodes(self, sourceLineLayer, snapLineLayer, tolerance):
+
+        TOMsMessageLog.logMessage("In snapNodes", level=Qgis.Info)
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        if editStartStatus is False:
+            # save the active layer
+
+            TOMsMessageLog.logMessage("Error: snapNodesL: Not able to start transaction on " + sourceLineLayer.name())
+            reply = QMessageBox.information(None, "Error",
+                                            "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+
+        # For each restriction in layer
+        for currRestriction in sourceLineLayer.getFeatures():
+
+            TOMsMessageLog.logMessage("In snapNodes. Considering " + str(currRestriction.attribute("GeometryID")), level=Qgis.Info)
+            currRestrictionGeom = currRestriction.geometry()
+            currGeometryID = currRestriction.attribute("GeometryID")
+
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In snapNodes. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue
+
+            newShape = self.checkRestrictionGeometryForSnappedNodes(currRestrictionGeom, snapLineLayer, tolerance, currGeometryID)
+
+            if newShape:
+                TOMsMessageLog.logMessage("In snapNodes. changes written ... ",
+                                         level=Qgis.Info)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+
+        #editCommitStatus = False
 
         editCommitStatus = sourceLineLayer.commitChanges()
 
@@ -392,7 +468,7 @@ class TOMsSnapTrace:
 
         if editCommitStatus is False:
             # save the active layer
-            QgsMessageLog.logMessage("Error: snapNodesP: Changes to " + sourceLineLayer.name() + " failed: " + str(
+            TOMsMessageLog.logMessage("Error: snapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
                 sourceLineLayer.commitErrors()))
             reply = QMessageBox.information(None, "Error",
                                             "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
@@ -401,148 +477,105 @@ class TOMsSnapTrace:
 
         return
 
-    def snapNodesL(self, sourceLineLayer, snapLineLayer, tolerance):
+    def checkRestrictionGeometryForSnappedNodes(self, currRestrictionGeom, snapLineLayer, tolerance, currGeometryID=None):
 
-        QgsMessageLog.logMessage("In snapNodesL", tag="TOMs panel")
+        # Snap node to nearest point
+        shapeChanged = False
+        currRestrictionPtsList = currRestrictionGeom.asPolyline()
+        startPoint = currRestrictionPtsList[0]
+        endPoint = currRestrictionPtsList[len(currRestrictionPtsList)-1]
+        #TOMsMessageLog.logMessage("currPoint geom type: " + str(currPoint.x()), level=Qgis.Info)
 
-        # For each restriction in layer
-        for currRestriction in sourceLineLayer.getFeatures():
-            #geom = feat.geometry()
-            #attr = feat.attributes()
+        newStartNode, closestFeature = self.findNearestNodeOnLineLayer(startPoint, snapLineLayer, tolerance, [currGeometryID])
+        if newStartNode:
+            shapeChanged = True
+            status = currRestrictionGeom.moveVertex(newStartNode, 0)
 
-            editStartStatus = sourceLineLayer.startEditing()
+        newEndNode, closestFeature = self.findNearestNodeOnLineLayer(endPoint, snapLineLayer, tolerance, [currGeometryID])
+        if newEndNode:
+            shapeChanged = True
+            status = currRestrictionGeom.moveVertex(newEndNode, (len(currRestrictionPtsList)-1))
 
-            """reply = QMessageBox.information(None, "Check",
-                                            "snapNodesL: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
-                                                editStartStatus),
-                                            QMessageBox.Ok)"""
-
-            if editStartStatus is False:
-                # save the active layer
-
-                QgsMessageLog.logMessage("Error: snapNodesL: Not able to start transaction on " + sourceLineLayer.name())
-                reply = QMessageBox.information(None, "Error",
-                                                "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
-                                                QMessageBox.Ok)
-                return
-            # Snap node to nearest point
-
-            if currRestriction.geometry() is None:
-                continue
-
-            QgsMessageLog.logMessage("In snapNodesL. Considering " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
-            ptsCurrRestriction = currRestriction.geometry().asPolyline()
-            currPoint = self.getStartPoint(currRestriction)
-            currVertex = 0
-            #QgsMessageLog.logMessage("currPoint geom type: " + str(currPoint.x()), tag="TOMs panel")
-
-            nearestPoint = self.findNearestPointL(currPoint, snapLineLayer, tolerance)   # returned as QgsFeature
-
-            if nearestPoint:
-                # Move the vertex
-                QgsMessageLog.logMessage("snapNodesL: Moving start point for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
-
-                sourceLineLayer.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), currRestriction.id(), currVertex)
-                # currRestriction.geometry().moveVertex(nearestPoint, currVertex)
-
-                QgsMessageLog.logMessage("Moving vertex ( " + str(currVertex) + ") to " + str(
-                    nearestPoint.asPoint().x()) + " " + str(nearestPoint.asPoint().y()),
-                                     tag="TOMs panel")
-
-            # Now consider the end point
-            currPoint = self.getEndPoint(currRestriction)
-
-            nearestPoint = self.findNearestPointL(currPoint, snapLineLayer, tolerance)
-
-            if nearestPoint:
-                # Move the vertex
-                QgsMessageLog.logMessage("snapNodesL: Moving end point " + str(len(ptsCurrRestriction)-1) +
-                                         " for " + str(currRestriction.attribute("GeometryID")), tag="TOMs panel")
-                sourceLineLayer.moveVertex(nearestPoint.asPoint().x(),
-                                                     nearestPoint.asPoint().y(), currRestriction.id(),
-                                                    len(ptsCurrRestriction) - 1)
-                QgsMessageLog.logMessage("Moving vertex ( " + str(len(ptsCurrRestriction) - 1) + ") to " + str(
-                    nearestPoint.asPoint().x()) + " " + str(nearestPoint.asPoint().y()),
-                                     tag="TOMs panel")
-
-            editCommitStatus = sourceLineLayer.commitChanges()
-
-            """reply = QMessageBox.information(None, "Check",
-                                            "snapNodesL: Status for commit to " + sourceLineLayer.name() + " is: " + str(
-                                                editCommitStatus),
-                                            QMessageBox.Ok)"""
-
-            if editCommitStatus is False:
-                # save the active layer
-                QgsMessageLog.logMessage("Error: snapNodesL: Changes to " + sourceLineLayer.name() + " failed: " + str(
-                                                    sourceLineLayer.commitErrors()))
-                reply = QMessageBox.information(None, "Error",
-                                                "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
-                                                    sourceLineLayer.commitErrors()),
-                                                QMessageBox.Ok)
-                return
-
-        return
+        if shapeChanged:
+            return currRestrictionGeom
+        else:
+            return None
 
     def snapVertices(self, sourceLineLayer, snapLineLayer, tolerance):
         # For each vertex within restriction, get nearest point on snapLineLayer ...
-        QgsMessageLog.logMessage("In snapVertices. Snapping " + sourceLineLayer.name() + " to " + snapLineLayer.name(), tag="TOMs panel")
-        QgsMessageLog.logMessage("In snapVertices. " + str(sourceLineLayer.featureCount()) + " features in " + sourceLineLayer.name(), tag="TOMs panel")
+        TOMsMessageLog.logMessage("In snapVertices. Snapping " + sourceLineLayer.name() + " to " + snapLineLayer.name(), level=Qgis.Info)
+        TOMsMessageLog.logMessage("In snapVertices. " + str(sourceLineLayer.featureCount()) + " features in " + sourceLineLayer.name(), level=Qgis.Info)
 
         editStartStatus = sourceLineLayer.startEditing()
 
         if editStartStatus is False:
             # save the active layer
-            QgsMessageLog.logMessage("Error: snapVertices: Not able to start transaction on " + sourceLineLayer.name())
+            TOMsMessageLog.logMessage("Error: snapVertices: Not able to start transaction on " + sourceLineLayer.name())
             reply = QMessageBox.information(None, "Error",
                                             "Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
             return
 
+        # For each restriction in layer
         for currRestriction in sourceLineLayer.getFeatures():
 
-            QgsMessageLog.logMessage(
-                "In snapVertices. Considering " + str(currRestriction.attribute("GeometryID")),
-                tag="TOMs panel")
+            TOMsMessageLog.logMessage("In snapNodes. Considering " + str(currRestriction.attribute("GeometryID")),
+                                     level=Qgis.Info)
+            currRestrictionGeom = currRestriction.geometry()
 
-            geom = currRestriction.geometry()
-
-            if currRestriction.geometry() is None:
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In snapVertices. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
                 continue
 
-            for vertexNr, vertexPt in enumerate(geom.asPolyline()):
+            newShape = self.checkRestrictionGeometryForSnappedVertices(currRestrictionGeom, snapLineLayer, tolerance)
 
-                nearestPoint = self.findNearestPointL(vertexPt, snapLineLayer, tolerance)
-
-                if nearestPoint:
-                    # Move the vertex
-                    QgsMessageLog.logMessage("Moving vertex " + str(vertexNr) + " for " + str(currRestriction.attribute("GeometryID")),
-                                             tag="TOMs panel")
-                    QgsMessageLog.logMessage("Moving from  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(nearestPoint.asPoint().x()) + " " + str(nearestPoint.asPoint().y()),
-                                             tag="TOMs panel")
-                    #moveStatus = geom.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), vertexNr)
-                    moveStatus = sourceLineLayer.moveVertex(nearestPoint.asPoint().x(), nearestPoint.asPoint().y(), currRestriction.id(), vertexNr)
-                    QgsMessageLog.logMessage("Moving status " + str(moveStatus),
-                                             tag="TOMs panel")
-
-        editCommitStatus = sourceLineLayer.commitChanges()
+            if newShape:
+                TOMsMessageLog.logMessage("In snapVertices. changes written ... ",
+                                         level=Qgis.Info)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
 
         #editCommitStatus = False
+        editCommitStatus = sourceLineLayer.commitChanges()
 
         if editCommitStatus is False:
             # save the active layer
-            QgsMessageLog.logMessage("Error: snapVertices: Changes to " + sourceLineLayer.name() + " failed: " + str(
-                sourceLineLayer.commitErrors()))
+            TOMsMessageLog.logMessage("Error: snapVertices: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                sourceLineLayer.commitErrors()), level=Qgis.Info)
             reply = QMessageBox.information(None, "Error",
                                             "Changes to " + sourceLineLayer.name() + " failed: " + str(
                                                 sourceLineLayer.commitErrors()),
                                             QMessageBox.Ok)
 
+    def checkRestrictionGeometryForSnappedVertices(self, currRestrictionGeom, snapLineLayer, tolerance):
 
-    def findNearestPointP(self, searchPt, pointLayer, tolerance):
+        # Snap vertices to nearest point on snapLineLayer
+
+        shapeChanged = False
+        currRestrictionPtsList = currRestrictionGeom.asPolyline()
+        #TOMsMessageLog.logMessage("currPoint geom type: " + str(currPoint.x()), level=Qgis.Info)
+
+        #newStartNode = self.findNearestNodeOnLine(startPoint, snapLineLayer, tolerance)
+
+        for vertexNr, vertexPt in enumerate(currRestrictionPtsList):
+
+            closestPoint, closestFeature = self.findNearestPointOnLineLayer(vertexPt, snapLineLayer, tolerance)
+            if closestPoint:
+                shapeChanged = True
+                # TODO: what is the point is within tolerance of a node ?
+                status = currRestrictionGeom.moveVertex(QgsPoint(closestPoint.asPoint()), vertexNr)
+
+        if shapeChanged:
+            return currRestrictionGeom
+        else:
+            return None
+
+
+        """def findNearestPointP(self, searchPt, pointLayer, tolerance):
         # given a point, find the nearest point (within the tolerance) within the given point layer
         # returns QgsPoint
-        #QgsMessageLog.logMessage("In findNearestPointP - pointLayer", tag="TOMs panel")
+        #TOMsMessageLog.logMessage("In findNearestPointP - pointLayer", level=Qgis.Info)
 
         searchRect = QgsRectangle(searchPt.x() - tolerance,
                                   searchPt.y() - tolerance,
@@ -560,33 +593,33 @@ class TOMsSnapTrace:
         for f in pointLayer.getFeatures(request):
             # Add any features that are found should be added to a list
 
-            #QgsMessageLog.logMessage("findNearestPointP: nearestPoint geom type: " + str(f.geometry().wkbType()), tag="TOMs panel")
-            dist = f.geometry().distance(QgsGeometry.fromPoint(searchPt))
+            #TOMsMessageLog.logMessage("findNearestPointP: nearestPoint geom type: " + str(f.geometry().wkbType()), level=Qgis.Info)
+            dist = f.geometry().distance(QgsGeometry.fromPointXY(searchPt))
             if dist < shortestDistance:
-                #QgsMessageLog.logMessage("findNearestPointP: found 'nearer' point", tag="TOMs panel")
+                #TOMsMessageLog.logMessage("findNearestPointP: found 'nearer' point", level=Qgis.Info)
                 shortestDistance = dist
                 #nearestPoint = f.geometry()
                 nearestPoint = f
 
-        QgsMessageLog.logMessage("In findNearestPointP: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+        TOMsMessageLog.logMessage("In findNearestPointP: shortestDistance: " + str(shortestDistance), level=Qgis.Info)
 
         del request
         del searchRect
 
         if shortestDistance < float("inf"):
 
-            QgsMessageLog.logMessage("In findNearestPointP: closestPoint {}".format(nearestPoint.geometry().exportToWkt()),
-                                     tag="TOMs panel")
+            TOMsMessageLog.logMessage("In findNearestPointP: closestPoint {}".format(nearestPoint.geometry().exportToWkt()),
+                                     level=Qgis.Info)
 
             return nearestPoint   # returns a geometry
         else:
             return None
+        """
 
-
-    def findNearestPointL(self, searchPt, lineLayer, tolerance):
+        """def findNearestPointL(self, searchPt, lineLayer, tolerance):
         # given a point, find the nearest point (within the tolerance) within the line layer
         # returns QgsPoint
-        QgsMessageLog.logMessage("In findNearestPointL. Checking lineLayer: " + lineLayer.name(), tag="TOMs panel")
+        TOMsMessageLog.logMessage("In findNearestPointL. Checking lineLayer: " + lineLayer.name(), level=Qgis.Info)
         searchRect = QgsRectangle(searchPt.x() - tolerance,
                                   searchPt.y() - tolerance,
                                   searchPt.x() + tolerance,
@@ -603,13 +636,129 @@ class TOMsSnapTrace:
         for f in lineLayer.getFeatures(request):
             # Add any features that are found should be added to a list
 
-            closestPtOnFeature = f.geometry().nearestPoint(QgsGeometry.fromPoint(searchPt))
-            dist = f.geometry().distance(QgsGeometry.fromPoint(searchPt))
+            closestPtOnFeature = f.geometry().nearestPoint(QgsGeometry.fromPointXY(searchPt))
+            dist = f.geometry().distance(QgsGeometry.fromPointXY(searchPt))
             if dist < shortestDistance:
                 shortestDistance = dist
                 closestPoint = closestPtOnFeature
 
-        #QgsMessageLog.logMessage("In findNearestPointL: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+        #TOMsMessageLog.logMessage("In findNearestPointL: shortestDistance: " + str(shortestDistance), level=Qgis.Info)
+
+        if shortestDistance < float("inf"):
+            #nearestPoint = QgsFeature()
+            # add the geometry to the feature,
+            #nearestPoint.setGeometry(QgsGeometry(closestPtOnFeature))
+            #TOMsMessageLog.logMessage("findNearestPointL: nearestPoint geom type: " + str(nearestPoint.wkbType()), level=Qgis.Info)
+            return closestPoint   # returns a geometry
+        else:
+            return None"""
+
+    def findNearestPointOnLineLayer(self, searchPt, lineLayer, tolerance, geometryIDs=None):
+        # given a point, find the nearest point (within the tolerance) within the line layer
+        # returns QgsPoint
+        #TOMsMessageLog.logMessage("In findNearestPointL. Checking lineLayer: " + lineLayer.name(), level=Qgis.Info)
+        searchRect = QgsRectangle(searchPt.x() - tolerance,
+                                  searchPt.y() - tolerance,
+                                  searchPt.x() + tolerance,
+                                  searchPt.y() + tolerance)
+
+        request = QgsFeatureRequest()
+        request.setFilterRect(searchRect)
+        request.setFlags(QgsFeatureRequest.ExactIntersect)
+
+        shortestDistance = float("inf")
+        #nearestPoint = QgsFeature()
+
+        # Loop through all features in the layer to find the closest feature
+        for f in lineLayer.getFeatures(request):
+            if geometryIDs:
+                #print ('***** currGeometryID: {}; GeometryID: {}'.format(currGeometryID, f.attribute("GeometryID")))
+                try:
+                    testGeometryID = f.attribute("GeometryID")
+                except KeyError:
+                    return None, None  # layer does not have "GeometryID" field, i.e., not restriction layer
+
+                if testGeometryID in geometryIDs:
+                    continue
+            # Add any features that are found should be added to a list
+            #print ('feature found: {}'.format(f.id()))
+            closestPtOnFeature = f.geometry().nearestPoint(QgsGeometry.fromPointXY(searchPt))
+            dist = f.geometry().distance(QgsGeometry.fromPointXY(searchPt))
+            if dist < shortestDistance:
+                shortestDistance = dist
+                closestPoint = closestPtOnFeature
+                closestFeature = f
+
+        #TOMsMessageLog.logMessage("In findNearestPointL: shortestDistance: " + str(shortestDistance), level=Qgis.Info)
+
+        if shortestDistance < float("inf"):
+            #nearestPoint = QgsFeature()
+            # add the geometry to the feature,
+            #nearestPoint.setGeometry(QgsGeometry(closestPtOnFeature))
+            #TOMsMessageLog.logMessage("findNearestPointL: nearestPoint geom type: " + str(nearestPoint.wkbType()), level=Qgis.Info)
+            return closestPoint, closestFeature   # returns a geometry
+        else:
+            return None, None
+
+    def findNearestNodeOnLineLayer(self, searchPtXY, lineLayer, tolerance, geometryIDs=None):
+        # given a point, find the nearest point (within the tolerance) within the line layer
+        # returns QgsPoint
+
+        closestPoint, closestFeature = self.findNearestPointOnLineLayer(searchPtXY, lineLayer, tolerance, geometryIDs)
+
+        if closestPoint:
+            # check to see whether nodes are within tolerance
+            searchPt = QgsPoint(searchPtXY)
+            startPoint = self.getStartPoint(closestFeature)
+            endPoint = self.getEndPoint(closestFeature)
+
+            if searchPt.distance(startPoint) < tolerance:
+                return startPoint, closestFeature
+            elif searchPt.distance(endPoint) < tolerance:
+                return endPoint, closestFeature
+
+        return None, None
+
+        """def findNearestPointL_2(self, searchPt, currRestriction, lineLayer, tolerance):
+        # given a point, find the nearest point (within the tolerance) within the line layer
+        # returns QgsPoint
+        TOMsMessageLog.logMessage("In findNearestPointL_2. Checking lineLayer: " + lineLayer.name(), level=Qgis.Info)
+        searchRect = QgsRectangle(searchPt.x() - tolerance,
+                                  searchPt.y() - tolerance,
+                                  searchPt.x() + tolerance,
+                                  searchPt.y() + tolerance)
+
+        request = QgsFeatureRequest()
+        request.setFilterRect(searchRect)
+        request.setFlags(QgsFeatureRequest.ExactIntersect)
+
+        shortestDistance = float("inf")
+        #nearestPoint = QgsFeature()
+
+        # Loop through all features in the layer to find the closest feature
+        for f in lineLayer.getFeatures(request):
+            # Add any features that are found should be added to a list
+
+            if f.id() != currRestriction.id():
+
+                vertexCoord, vertex, prevVertex, nextVertex, distSquared = \
+                    f.geometry().closestVertex(searchPt)
+                dist = math.sqrt(distSquared)
+
+                if dist < tolerance:
+
+                    TOMsMessageLog.logMessage(
+                        "In findNearestPointL_2. Found point: f.id: " + str(f.id()) + " curr_id: " + str(
+                            currRestriction.id()),
+                        level=Qgis.Info)
+
+                    TOMsMessageLog.logMessage("In findNearestPointL_2. Setting distance ..." + str(dist), level=Qgis.Info)
+
+                    if dist < shortestDistance:
+                        shortestDistance = dist
+                        closestPoint = f.geometry().vertexAt(vertex)
+
+        #TOMsMessageLog.logMessage("In findNearestPointL: shortestDistance: " + str(shortestDistance), level=Qgis.Info)
 
         del request
         del searchRect
@@ -618,29 +767,30 @@ class TOMsSnapTrace:
             #nearestPoint = QgsFeature()
             # add the geometry to the feature,
             #nearestPoint.setGeometry(QgsGeometry(closestPtOnFeature))
-            #QgsMessageLog.logMessage("findNearestPointL: nearestPoint geom type: " + str(nearestPoint.wkbType()), tag="TOMs panel")
-            return closestPoint   # returns a geometry
+            #TOMsMessageLog.logMessage("findNearestPointL: nearestPoint geom type: " + str(nearestPoint.wkbType()), level=Qgis.Info)
+            return QgsGeometry.fromPointXY(closestPoint)   # returns a geometry
         else:
             return None
 
-    def nearbyLineFeature(self, currFeatureGeom, searchLineLayer, tolerance):
 
-        QgsMessageLog.logMessage("In nearbyLineFeature - lineLayer", tag="TOMs panel")
+        def nearbyLineFeature(self, currFeatureGeom, searchLineLayer, tolerance):
+
+        TOMsMessageLog.logMessage("In nearbyLineFeature - lineLayer", level=Qgis.Info)
 
         nearestLine = None
 
         for currVertexNr, currVertexPt in enumerate(currFeatureGeom.asPolyline()):
 
-            nearestLine = self.findNearestLine(currVertexPt, searchLineLayer, tolerance)
+            nearestLine = self.findNearestLineLayer(currVertexPt, searchLineLayer, tolerance)
             if nearestLine:
                 break
 
         return nearestLine
-
-    def findNearestLine(self, searchPt, lineLayer, tolerance):
+        """
+    def findNearestLineLayer(self, searchPt, lineLayer, tolerance):
         # given a point, find the nearest point (within the tolerance) within the line layer
         # returns QgsPoint
-        QgsMessageLog.logMessage("In findNearestLine - lineLayer", tag="TOMs panel")
+        TOMsMessageLog.logMessage("In findNearestLine - lineLayer: " + lineLayer.name() + "; x:" + str(searchPt.x()), level=Qgis.Info)
         searchRect = QgsRectangle(searchPt.x() - tolerance,
                                   searchPt.y() - tolerance,
                                   searchPt.x() + tolerance,
@@ -656,21 +806,21 @@ class TOMsSnapTrace:
         for f in lineLayer.getFeatures(request):
             # Add any features that are found should be added to a list
 
-            #closestPtOnFeature = f.geometry().nearestPoint(QgsGeometry.fromPoint(searchPt))
-            dist = f.geometry().distance(QgsGeometry.fromPoint(searchPt))
+            #closestPtOnFeature = f.geometry().nearestPoint(QgsGeometry.fromPointXY(searchPt))
+            dist = f.geometry().distance(QgsGeometry.fromPointXY(searchPt))
             if dist < shortestDistance:
                 shortestDistance = dist
                 closestLine = f
 
-        QgsMessageLog.logMessage("In findNearestLine: shortestDistance: " + str(shortestDistance), tag="TOMs panel")
+        TOMsMessageLog.logMessage("In findNearestLine: shortestDistance: " + str(shortestDistance), level=Qgis.Info)
 
         del request
         del searchRect
 
         if shortestDistance < float("inf"):
 
-            """QgsMessageLog.logMessage("In findNearestLine: closestLine {}".format(closestLine.exportToWkt()),
-                                     tag="TOMs panel")"""
+            """TOMsMessageLog.logMessage("In findNearestLine: closestLine {}".format(closestLine.exportToWkt()),
+                                     level=Qgis.Info)"""
 
             return closestLine   # returns a geometry
         else:
@@ -678,22 +828,19 @@ class TOMsSnapTrace:
 
 
     def getStartPoint(self, restriction):
-        #QgsMessageLog.logMessage("In getStartPoint", tag="TOMs panel")
-
+        #TOMsMessageLog.logMessage("In getStartPoint", level=Qgis.Info)
         return restriction.geometry().vertexAt(0)
 
-
     def getEndPoint(self, restriction):
-        #QgsMessageLog.logMessage("In getEndPoint", tag="TOMs panel")
-
+        #TOMsMessageLog.logMessage("In getEndPoint", level=Qgis.Info)
         ptsCurrRestriction = restriction.geometry().asPolyline()
         return restriction.geometry().vertexAt(len(ptsCurrRestriction)-1)
 
 
 
-    def TraceRestriction2(self, sourceLineLayer, snapLineLayer, tolerance):
+        """def TraceRestriction2(self, sourceLineLayer, snapLineLayer, tolerance):
 
-        QgsMessageLog.logMessage("In TraceRestriction2", tag="TOMs panel")
+        TOMsMessageLog.logMessage("In TraceRestriction2", level=Qgis.Info)
 
         editStartStatus = sourceLineLayer.startEditing()
 
@@ -714,25 +861,31 @@ class TOMsSnapTrace:
 
             # get nearest snapLineLayer feature (using the second vertex as the test)
 
-            QgsMessageLog.logMessage("In TraceRestriction2. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
+            #TOMsMessageLog.logMessage("In TraceRestriction2. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
 
             currRestrictionGeom = currRestriction.geometry()
-            nrVerticesInCurrRestriction = len(currRestrictionGeom.asPolyline())
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction2. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue
 
-            nearestLine = self.nearbyLineFeature(currRestrictionGeom, snapLineLayer, DUPLICATE_POINT_DISTANCE)
+            nrVerticesInCurrRestriction = len(currRestrictionGeom.asPolyline())
 
             # Check that this is not a circular feature, i.e., with the end points close to each other. If it is, it will cause some difficulties ...
             if self.circularFeature(currRestriction, tolerance):
                 continue  # move to the next feature
 
+            nearestLine = self.nearbyLineFeature(currRestrictionGeom, snapLineLayer, DUPLICATE_POINT_DISTANCE)
+
             if nearestLine:
 
                 # Now, consider each vertex of the sourceLineLayer in turn - and create new geometry
 
-                QgsMessageLog.logMessage(
+                TOMsMessageLog.logMessage(
                     "In TraceRestriction2. nearest line found. Considering " + str(
                         len(currRestrictionGeom.asPolyline())) + " points",
-                    tag="TOMs panel")
+                    level=Qgis.Info)
                 nearestLineGeom = nearestLine.geometry()
 
                 # initialise a new Geometry
@@ -756,7 +909,7 @@ class TOMsSnapTrace:
                     # Insert Vertex A. NB: don't want to duplicate points
                     if countNewVertices > 1:
                         if not self.duplicatePoint(vertexA, newGeometryCoordsList[-1]):
-                            QgsMessageLog.logMessage("In TraceRestriction2: adding vertex " + str(currVertexNr), tag="TOMs panel")
+                            TOMsMessageLog.logMessage("In TraceRestriction2: adding vertex " + str(currVertexNr), level=Qgis.Info)
                             newGeometryCoordsList.append(vertexA)
                             countNewVertices = countNewVertices + 1
                     else:  # first pass
@@ -764,31 +917,33 @@ class TOMsSnapTrace:
                         countNewVertices = countNewVertices + 1
 
                     # Does this segement lie on the Snapline? and if it lies within the buffer
+                    # TODO: What happens if the trace line stops ... (perhaps check for the start/end)
 
                     if self.pointsOnLine(vertexA, vertexB, nearestLineGeom, DUPLICATE_POINT_DISTANCE) and \
                             self.lineInBuffer(vertexA, vertexB, nearestLineGeom, tolerance):
 
-                        QgsMessageLog.logMessage(
+                        TOMsMessageLog.logMessage(
                             "In TraceRestriction2. " + str(
                                 currRestriction.attribute(
                                     "GeometryID")) + ": considering segment between " + str(
                                 currVertexNr) + " and " + str(currVertexNr + 1),
-                            tag="TOMs panel")
+                            level=Qgis.Info)
 
                         # we have a line segement that needs to be traced. Set upi relevant variables
 
                         lineAB_Geom = QgsGeometry.fromPolyline([vertexA, vertexB])
                         lengthAB = lineAB_Geom.length()
 
-                        distToA = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPoint(vertexA))  #QgsGeometry of point ??
-                        distToB = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPoint(vertexB))
+                        distToA = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPointXY(vertexA))  #QgsGeometry of point ??
+                        distToB = nearestLineGeom.lineLocatePoint (QgsGeometry.fromPointXY(vertexB))
 
                         # NB: countDirectionAscending only required once for each restriction
 
                         if countDirectionAscending == None:
+                            # TODO: Getting errors with countDirection at start/end of line due (perhaps) to snapping issues. Would be better to check the countDirection over the length of the line??
                             countDirectionAscending = self.findCountDirection(distToA, distToB, lengthSnapLine, lengthAB)
 
-                        QgsMessageLog.logMessage("In TraceRestriction2: ******  countDirectionAscending " + str(countDirectionAscending), tag="TOMs panel")
+                        TOMsMessageLog.logMessage("In TraceRestriction2: ******  countDirectionAscending " + str(countDirectionAscending), level=Qgis.Info)
 
                         # get closest vertices ...  NB: closestVertex returns point with nearest distance not necessarily "along the line", e.g., in a cul-de-sac
 
@@ -800,29 +955,29 @@ class TOMsSnapTrace:
                         currSnapLineVertex = nearestLineGeom.asPolyline()[vertexNrAfterA]
                         currSnapLineVertexNr = vertexNrAfterA
 
-                        QgsMessageLog.logMessage("In TraceRestriction2: ****** START nearestVertexAfterA " + str(vertexNrAfterA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(vertexNrAfterB), tag="TOMs panel")
-                        #QgsMessageLog.logMessage("In TraceRestriction2: ****** START vertexNrAfterA " + str(vertexNrAfterA) + " vertexNrAfterB: " + str(vertexNrAfterB), tag="TOMs panel")
-                        QgsMessageLog.logMessage("In TraceRestriction2: ******  includeVertexAfterA " + str(includeVertexAfterA) + "; includeVertexAfterB " + str(includeVertexAfterB), tag="TOMs panel")
+                        TOMsMessageLog.logMessage("In TraceRestriction2: ****** START nearestVertexAfterA " + str(vertexNrAfterA) + "; curr " + str(currSnapLineVertexNr) + " B: " + str(vertexNrAfterB), level=Qgis.Info)
+                        #TOMsMessageLog.logMessage("In TraceRestriction2: ****** START vertexNrAfterA " + str(vertexNrAfterA) + " vertexNrAfterB: " + str(vertexNrAfterB), level=Qgis.Info)
+                        TOMsMessageLog.logMessage("In TraceRestriction2: ******  includeVertexAfterA " + str(includeVertexAfterA) + "; includeVertexAfterB " + str(includeVertexAfterB), level=Qgis.Info)
 
                         if includeVertexAfterA:
 
-                            QgsMessageLog.logMessage(
-                                "In TraceRestriction2: includeVertexAfterA: " + str(currSnapLineVertexNr) + " currSnapLineVertex: " + str(currSnapLineVertex.x()) + "," + str(currSnapLineVertex.y()), tag="TOMs panel")
-                            QgsMessageLog.logMessage("In TraceRestriction2: includeVertexAfterA: vertexA: " + str(vertexA.x()) + "," + str(vertexA.y()), tag="TOMs panel")
+                            TOMsMessageLog.logMessage(
+                                "In TraceRestriction2: includeVertexAfterA: " + str(currSnapLineVertexNr) + " currSnapLineVertex: " + str(currSnapLineVertex.x()) + "," + str(currSnapLineVertex.y()), level=Qgis.Info)
+                            TOMsMessageLog.logMessage("In TraceRestriction2: includeVertexAfterA: vertexA: " + str(vertexA.x()) + "," + str(vertexA.y()), level=Qgis.Info)
 
                             if not self.duplicatePoint(vertexA, currSnapLineVertex):
                                 if not self.duplicatePoint(vertexB, currSnapLineVertex):
                                     newGeometryCoordsList.append(currSnapLineVertex)
                                     countNewVertices = countNewVertices + 1
-                                    QgsMessageLog.logMessage("In TraceRestriction2: ... including trace line vertex " + str(currSnapLineVertexNr) + " : countNewVertices " + str(countNewVertices), tag="TOMs panel")
+                                    TOMsMessageLog.logMessage("In TraceRestriction2: ... including trace line vertex " + str(currSnapLineVertexNr) + " : countNewVertices " + str(countNewVertices), level=Qgis.Info)
 
-                            """status = self.insertVertexIntoRestriction(newGeometryCoordsList, curSnapLineVertex)
+                            status = self.insertVertexIntoRestriction(newGeometryCoordsList, curSnapLineVertex)
                             if status == True:
                                 newGeometryVertexNr = newGeometryVertexNr + 1
                             else:
                                 reply = QMessageBox.information(None, "Error",
                                                                 "TraceRestriction2: Problem adding nearestVertexToA ",
-                                                                QMessageBox.Ok)"""
+                                                                QMessageBox.Ok)
                         stopped = False
 
                         if vertexNrAfterA == vertexNrAfterB:
@@ -858,37 +1013,37 @@ class TOMsSnapTrace:
                             if not self.duplicatePoint(newGeometryCoordsList[countNewVertices-1], currSnapLineVertex):
                                 newGeometryCoordsList.append(currSnapLineVertex)
                                 countNewVertices = countNewVertices + 1
-                                QgsMessageLog.logMessage("In TraceRestriction2: ... including trace line vertex " + str(currSnapLineVertexNr) + " : countNewVertices " + str(countNewVertices), tag="TOMs panel")
-                                QgsMessageLog.logMessage("In TraceRestriction2: vertexNrAfterA " + str(vertexNrAfterA) + "; curr " + str(currSnapLineVertexNr) + " vertexNrAfterB: " + str(vertexNrAfterB), tag="TOMs panel")
+                                TOMsMessageLog.logMessage("In TraceRestriction2: ... including trace line vertex " + str(currSnapLineVertexNr) + " : countNewVertices " + str(countNewVertices), level=Qgis.Info)
+                                TOMsMessageLog.logMessage("In TraceRestriction2: vertexNrAfterA " + str(vertexNrAfterA) + "; curr " + str(currSnapLineVertexNr) + " vertexNrAfterB: " + str(vertexNrAfterB), level=Qgis.Info)
 
-                            """if countNewVertices > 1000:
-                                break"""
+                            #if countNewVertices > 1000:
+                                #break
 
                     # Insert Vertex B. This is the final point in the line - check for duplication ...
                     if countNewVertices > 1:
                         if self.duplicatePoint(vertexB, newGeometryCoordsList[-1]):
                             newGeometryCoordsList[-1] = vertexB
-                            QgsMessageLog.logMessage("In TraceRestriction2: overwriting last vertex ...", tag="TOMs panel")
+                            TOMsMessageLog.logMessage("In TraceRestriction2: overwriting last vertex ...", level=Qgis.Info)
                         else:
                             newGeometryCoordsList.append(vertexB)
                             countNewVertices = countNewVertices + 1
                     else:
                         newGeometryCoordsList.append(vertexB)
                         countNewVertices = countNewVertices + 1
-                        
+
                 # Now replace the orginal geometry of the current restriction with the new geometry
                 #currRestriction.setGeometry(QgsGeometry.fromPolyline(newGeometryCoordsList))
 
                 newShape = QgsGeometry.fromPolyline(newGeometryCoordsList)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
-                QgsMessageLog.logMessage("In TraceRestriction2. " + str(currRestriction.attribute("GeometryID")) +
-                                         ": geometry changed ***. New nrVertices " + str(countNewVertices), tag="TOMs panel")
-                QgsMessageLog.logMessage("In TraceRestriction2: new geom: " + str(currRestriction.geometry().exportToWkt()),
-                                         tag="TOMs panel")
-                QgsMessageLog.logMessage(
-                    "In TraceRestriction2. " + str(currRestriction.attribute(
-                        "GeometryID")) + ": geometry changed ***. New nrVertices " + str(
-                        countNewVertices) + "; OrigLen: " + str(lengthAB) + " newLen: " + str(newShape.length()), tag="TOMs panel")
+                TOMsMessageLog.logMessage("In TraceRestriction2. " + str(currRestriction.attribute("GeometryID")) +
+                                         ": geometry changed ***. New nrVertices " + str(countNewVertices), level=Qgis.Info)
+                TOMsMessageLog.logMessage("In TraceRestriction2: new geom: " + str(currRestriction.geometry().exportToWkt()),
+                                         level=Qgis.Info)
+                #TOMsMessageLog.logMessage(
+                #   "In TraceRestriction2. " + str(currRestriction.attribute(
+                #      "GeometryID")) + ": geometry changed ***. New nrVertices " + str(
+                #     countNewVertices) + "; OrigLen: " + str(lengthAB) + " newLen: " + str(newShape.length()), level=Qgis.Info)
 
         editCommitStatus = False
 
@@ -898,6 +1053,229 @@ class TOMsSnapTrace:
             reply = QMessageBox.information(None, "Error",
                                             "Changes to " + sourceLineLayer.name() + " failed: " + str(
                                                 sourceLineLayer.commitErrors()), QMessageBox.Ok)
+        """
+    """
+    ****** Approach whcih calculates shortest route between then snaps to that
+    """
+
+    def setupTrace(self, layer):
+        reply = QMessageBox.information(None, "Information",
+                                        "Setting up trace with " + layer.name(), QMessageBox.Ok)
+        self.director = QgsVectorLayerDirector(layer, -1, '', '', '', QgsVectorLayerDirector.DirectionBoth)
+        strategy = QgsNetworkDistanceStrategy()
+        self.director.addStrategy(strategy)
+        self.builder = QgsGraphBuilder(layer.crs())
+
+    def getShortestPath(self, startPoint, endPoint, layer):
+        # taken from Qgis Py Cookbook
+        #startPoint = self.ptList[0][0].asPoint()
+        #endPoint = self.ptList[1][0].asPoint()
+
+        self.director = QgsVectorLayerDirector(layer, -1, '', '', '', QgsVectorLayerDirector.DirectionBoth)
+        strategy = QgsNetworkDistanceStrategy()
+        self.director.addStrategy(strategy)
+        self.builder = QgsGraphBuilder(layer.crs())
+
+        TOMsMessageLog.logMessage("In getShortestPath: startPt: " + startPoint.asWkt(),
+                                 level=Qgis.Info)
+        tiedPoints = self.director.makeGraph(self.builder, [startPoint, endPoint])
+        tStart, tStop = tiedPoints
+
+        graph = self.builder.graph()
+        idxStart = graph.findVertex(tStart)
+
+        tree = QgsGraphAnalyzer.shortestTree(graph, idxStart, 0)
+
+        idxStart = tree.findVertex(tStart)
+        idxEnd = tree.findVertex(tStop)
+
+        if idxEnd == -1:
+            return None
+
+        # Add last point
+        route = [tree.vertex(idxEnd).point()]
+
+        # Iterate the graph
+        while idxEnd != idxStart:
+            edgeIds = tree.vertex(idxEnd).incomingEdges()
+            if len(edgeIds) == 0:
+                break
+            edge = tree.edge(edgeIds[0])
+            route.insert(0, tree.vertex(edge.fromVertex()).point())
+            idxEnd = edge.fromVertex()
+
+        return route
+
+    def TraceRestriction3(self, sourceLineLayer, snapLineLayer, tolerance):
+
+        TOMsMessageLog.logMessage("In TraceRestriction2", level=Qgis.Info)
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        """reply = QMessageBox.information(None, "Check",
+                                        "TraceRestriction2: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                            editStartStatus),
+                                        QMessageBox.Ok)"""
+
+        if editStartStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "TraceRestriction2: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+
+        # set up shortest path checker
+        #self.setupTrace(snapLineLayer)
+
+        for currRestriction in sourceLineLayer.getFeatures():
+
+            TOMsMessageLog.logMessage("In TraceRestriction3. Considering " + str(currRestriction.attribute("GeometryID")),
+                                     level=Qgis.Info)
+            currRestrictionGeom = currRestriction.geometry()
+
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction3. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue
+
+            currRestrictionPtsList = currRestrictionGeom.asPolyline()
+            startPoint = currRestrictionPtsList[0]
+            endPoint = currRestrictionPtsList[len(currRestrictionPtsList) - 1]
+
+            # check that start/end points are on the kerb
+            """closestPointStart, closestFeatureStart = self.findNearestPointOnLineLayer(startPoint, snapLineLayer, tolerance)
+            closestPointEnd, closestFeatureEnd = self.findNearestPointOnLineLayer(endPoint, snapLineLayer, tolerance)
+
+            if not (closestPointStart and closestPointEnd):
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction3. *************** SKIPPING " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue"""
+
+            route = self.getShortestPath(startPoint, endPoint, snapLineLayer)
+            if not route:
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction3. *************** SKIPPING " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue
+
+            routeGeom = QgsGeometry.fromPolylineXY(route)
+            newShape = False
+
+            if route:
+                newShape = self.checkRestrictionGeometryForTracedVertices(currRestrictionGeom, routeGeom, tolerance)
+
+            if newShape:
+                TOMsMessageLog.logMessage("In TraceRestriction3. changes written ... ",
+                                         level=Qgis.Info)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+
+        #editCommitStatus = False
+        editCommitStatus = sourceLineLayer.commitChanges()
+
+        if editCommitStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                sourceLineLayer.commitErrors()), QMessageBox.Ok)
+
+    """ ***** """
+    def checkRestrictionGeometryForTracedVertices(self, currRestrictionGeom, routeGeom, tolerance):
+        # Snap vertices to nearest point on snapLineLayer
+
+        currRestrictionPtsList = currRestrictionGeom.asPolyline()
+        nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+
+        currVertexNr = 1
+        shapeChanged = False
+        vertexA = currRestrictionPtsList[0]
+        newRestrictionPtsList = [vertexA]
+
+        vertexAOnRoute = self.pointOnLine(vertexA, routeGeom)
+
+        while currVertexNr <= (nrVerticesInCurrRestriction - 1):
+
+            vertexB = currRestrictionPtsList[currVertexNr]
+            vertexBOnRoute = self.pointOnLine(vertexB, routeGeom)
+            #print ('currVertexNr: {}; A: {}; B: {}'.format(currVertexNr, vertexA.asWkt(), vertexB.asWkt()))
+            if vertexAOnRoute and vertexBOnRoute:
+                # we have a trace situation
+                #print('Tracing {} to {}'.format(currVertexNr-1, currVertexNr))
+                routeSection = self.traceRouteGeom(vertexAOnRoute, vertexBOnRoute, routeGeom, tolerance)
+                if routeSection:
+                    newRestrictionPtsList.extend(routeSection)
+                    shapeChanged = True
+
+            newRestrictionPtsList.append(vertexB)
+
+            vertexA = vertexB
+            vertexAOnRoute = vertexBOnRoute
+            currVertexNr = currVertexNr + 1
+
+        #print ('---------------')
+        if shapeChanged:
+            return QgsGeometry.fromPolylineXY(newRestrictionPtsList)
+        else:
+            return None
+
+    def traceRouteGeom(self, vertexA, vertexB, routeGeom, tolerance):
+
+        # assumes that A abd B are on route
+
+        distA = routeGeom.lineLocatePoint(QgsGeometry.fromPointXY(vertexA))
+        distB = routeGeom.lineLocatePoint(QgsGeometry.fromPointXY(vertexB))
+        lineAB_Geom = QgsGeometry.fromPolylineXY([vertexA, vertexB])
+
+        # addRouteVerticesToRestrictionGeometry(vertexA, vertexB)
+        routeSegmentPtsList = []
+        shapeChanged = False
+
+        vertex, vertexNr, prevVertexNr, nextVertexNr, distance = routeGeom.closestVertex(vertexA)
+        distToVertexAOnRoute = routeGeom.distanceToVertex(vertexNr)
+
+        if abs(distToVertexAOnRoute - distA) < DUPLICATE_POINT_DISTANCE:
+            # same point
+            currRouteVertexNr = nextVertexNr
+        elif distToVertexAOnRoute < distA:
+            currRouteVertexNr = nextVertexNr
+        else:
+            currRouteVertexNr = vertexNr
+
+        distToNextRouteVertex = routeGeom.distanceToVertex(currRouteVertexNr)
+        while distToNextRouteVertex < distB:
+            # add point to newGeom
+            if abs(distToNextRouteVertex - distB) < DUPLICATE_POINT_DISTANCE:
+                break
+
+            # check whether point is within tolerance
+            currRouteVertex = QgsPointXY(routeGeom.vertexAt(currRouteVertexNr))
+            distFromLineAB_ToCurrRouteVertex = lineAB_Geom.distance(QgsGeometry.fromPointXY(currRouteVertex))
+            if distFromLineAB_ToCurrRouteVertex > tolerance:
+                shapeChanged = False
+                break
+
+            routeSegmentPtsList.append(currRouteVertex)
+            shapeChanged = True
+
+            currRouteVertexNr = currRouteVertexNr + 1
+            distToNextRouteVertex = routeGeom.distanceToVertex(currRouteVertexNr)
+
+        if shapeChanged:
+            return routeSegmentPtsList
+
+        return None
+
+
+    def pointOnLine(self, pt, line):
+        ptGeom = QgsGeometry.fromPointXY(pt)
+        nearestPt = line.nearestPoint(ptGeom)
+        distance = nearestPt.distance(ptGeom)
+        if nearestPt and distance < DUPLICATE_POINT_DISTANCE:
+            return nearestPt.asPoint()
+        return None
 
     def duplicatePoint(self, pointA, pointB):
 
@@ -910,9 +1288,10 @@ class TOMsSnapTrace:
 
         return duplicate
 
-    def circularFeature(self, currRestriction, lineTolerance):
+        """
+        def circularFeature(self, currRestriction, lineTolerance):
 
-        QgsMessageLog.logMessage("In circularFeature", tag="TOMs panel")
+        TOMsMessageLog.logMessage("In circularFeature", level=Qgis.Info)
 
         currRestrictionGeom = currRestriction.geometry()
 
@@ -921,23 +1300,24 @@ class TOMsSnapTrace:
         startVertex = currRestrictionGeom.asPolyline()[0]
         endVertex = currRestrictionGeom.asPolyline()[nrVerticesInCurrRestriction-1]
 
-        dist = QgsGeometry.fromPoint(startVertex).distance(QgsGeometry.fromPoint(endVertex))
+        dist = QgsGeometry.fromPointXY(startVertex).distance(QgsGeometry.fromPointXY(endVertex))
 
         if (dist <= lineTolerance):
-            QgsMessageLog.logMessage("In circularFeature: Circular feature found: " + currRestriction.attribute(
-                        "GeometryID"), tag="TOMs panel")
+            TOMsMessageLog.logMessage("In circularFeature: Circular feature found: " + currRestriction.attribute(
+                        "GeometryID"), level=Qgis.Info)
             return True
         else:
             return False
 
-    def pointsOnLine(self, vertexA, vertexB, nearestLineGeom, lineTolerance):
 
-        QgsMessageLog.logMessage("In pointsOnLine", tag="TOMs panel")
+        def pointsOnLine(self, vertexA, vertexB, nearestLineGeom, lineTolerance):
 
-        vertexA_Geom = QgsGeometry.fromPoint(vertexA)
+        TOMsMessageLog.logMessage("In pointsOnLine", level=Qgis.Info)
+
+        vertexA_Geom = QgsGeometry.fromPointXY(vertexA)
         distNearestLineToVertexA = vertexA_Geom.shortestLine(nearestLineGeom).length()
 
-        vertexB_Geom = QgsGeometry.fromPoint(vertexB)
+        vertexB_Geom = QgsGeometry.fromPointXY(vertexB)
         distNearestLineToVertexB = vertexB_Geom.shortestLine(nearestLineGeom).length()
 
         if (distNearestLineToVertexA <= lineTolerance) and (distNearestLineToVertexB <= lineTolerance):
@@ -945,9 +1325,10 @@ class TOMsSnapTrace:
         else:
             return False
 
-    def lineInBuffer(self, vertexA, vertexB, nearestLineGeom, bufferWidth):
 
-        QgsMessageLog.logMessage("In lineInBuffer", tag="TOMs panel")
+        def lineInBuffer(self, vertexA, vertexB, nearestLineGeom, bufferWidth):
+
+        TOMsMessageLog.logMessage("In lineInBuffer", level=Qgis.Info)
 
         isWithin = False
 
@@ -959,9 +1340,9 @@ class TOMsSnapTrace:
 
         return isWithin
 
-    def findCountDirection(self, distToA, distToB, lengthSnapLine, lengthAB):
+        def findCountDirection(self, distToA, distToB, lengthSnapLine, lengthAB):
 
-        QgsMessageLog.logMessage("In findCountDirection", tag="TOMs panel")
+        TOMsMessageLog.logMessage("In findCountDirection", level=Qgis.Info)
 
         # function to determine count direction for moving along lineAB in respect to the numbering on SnapLine
 
@@ -988,7 +1369,7 @@ class TOMsSnapTrace:
             else:
                 ascending = False
 
-        QgsMessageLog.logMessage("In findCountDirection. Ascending: " + str(ascending) + " ShortestPath: " + str(shortestPath) + " lengthAB: " + str(lengthAB), tag="TOMs panel")
+        TOMsMessageLog.logMessage("In findCountDirection. Ascending: " + str(ascending) + " ShortestPath: " + str(shortestPath) + " lengthAB: " + str(lengthAB), level=Qgis.Info)
 
         # above processing assumes that want shortest distance. Need to check this is the case
         if lengthAB > (shortestPath * 1.1):
@@ -1000,8 +1381,7 @@ class TOMsSnapTrace:
 
         return ascending
 
-
-    def checkNeighbouringVertices(self, vertexA, vertexB,
+        def checkNeighbouringVertices(self, vertexA, vertexB,
                                   nearestLineGeom, countDirectionAscending,
                                   distToA, distToB):
 
@@ -1011,19 +1391,21 @@ class TOMsSnapTrace:
         distSquared, closestPt, vertexNrAfterB = nearestLineGeom.closestSegmentWithContext(
             QgsPoint(vertexB.x(), vertexB.y()))
 
+        # TODO: Check that there are details returned ...
+
         distVertexAfterA = nearestLineGeom.lineLocatePoint(
-            QgsGeometry.fromPoint(nearestLineGeom.asPolyline()[vertexNrAfterA]))  # QgsPoint
+            QgsGeometry.fromPointXY(nearestLineGeom.asPolyline()[vertexNrAfterA]))  # QgsPoint
         distVertexAfterB = nearestLineGeom.lineLocatePoint(
-            QgsGeometry.fromPoint(nearestLineGeom.asPolyline()[vertexNrAfterB]))
+            QgsGeometry.fromPointXY(nearestLineGeom.asPolyline()[vertexNrAfterB]))
         # Work out whether or not nearest vertices need to be included …
 
         includeVertexAfterA = False
         includeVertexAfterB = False
 
-        QgsMessageLog.logMessage(
-            "In checkNeighbouringVertices: --- vertexNrAfterA " + str(vertexNrAfterA) + "; vertexNrAfterB: " + str(vertexNrAfterB), tag="TOMs panel")
-        QgsMessageLog.logMessage(
-            "In checkNeighbouringVertices: --- distVertexAfterA " + str(distVertexAfterA) + ": distToA " + str(distToA) + "; distVertexAfterB: " + str(distVertexAfterB) + ": distToB " + str(distToB), tag="TOMs panel")
+        TOMsMessageLog.logMessage(
+            "In checkNeighbouringVertices: --- vertexNrAfterA " + str(vertexNrAfterA) + "; vertexNrAfterB: " + str(vertexNrAfterB), level=Qgis.Info)
+        TOMsMessageLog.logMessage(
+            "In checkNeighbouringVertices: --- distVertexAfterA " + str(distVertexAfterA) + ": distToA " + str(distToA) + "; distVertexAfterB: " + str(distVertexAfterB) + ": distToB " + str(distToB), level=Qgis.Info)
 
         # standard case(s)
         if countDirectionAscending == True:  # ascending  NB: VertexAfterB always excluded (by definition)
@@ -1053,11 +1435,12 @@ class TOMsSnapTrace:
             includeVertexAfterB = False
 
         return includeVertexAfterA, vertexNrAfterA, includeVertexAfterB, vertexNrAfterB
+        """
 
     def removeDuplicatePoints(self, sourceLineLayer, tolerance):
         # function to remove duplicate points or ones that are colinear (?) or at least ones that double back
 
-        QgsMessageLog.logMessage("In removeDuplicatePoints", tag="TOMs panel")
+        TOMsMessageLog.logMessage("In removeDuplicatePoints", level=Qgis.Info)
 
         editStartStatus = sourceLineLayer.startEditing()
 
@@ -1073,83 +1456,29 @@ class TOMsSnapTrace:
                                             "removeDuplicatePoints: Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
             return
-        # Read through each restriction and compare each point
+        # Read through each restriction and compare successive points
 
-        # For each restriction in layer
         for currRestriction in sourceLineLayer.getFeatures():
 
-            restGeom = currRestriction.geometry()
-            QgsMessageLog.logMessage(
-                "In removeDuplicatePoints. Considering " + str(currRestriction.attribute("GeometryID")),
-                tag="TOMs panel")
+            TOMsMessageLog.logMessage("In removeDuplicatePoints. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
 
-            if restGeom is None:
+            currRestrictionGeom = currRestriction.geometry()
+
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In removeDuplicatePoints. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
                 continue
 
-            line = currRestriction.geometry().asPolyline()
-            #line = self.getLineForAz(currRestriction)
-            for vertexNr in range(len(line)):
-            #for vertexNr, vertexPt in enumerate(geom.asPolyline(), start=1):
+            newShape = self.checkRestrictionGeometryForDuplicatePoints(currRestrictionGeom, tolerance)
 
-                vertexPt = line[vertexNr]
-                vertexDeleted = False
-
-                if vertexNr > 0:
-
-                    prevPt = line[vertexNr-1]
-
-                    if self.duplicatePoint(vertexPt, prevPt):
-                        # have found duplicate
-                        QgsMessageLog.logMessage(
-                            "In removeDuplicatePoints. " + str(currRestriction.attribute("GeometryID")) + ": Duplicate at vertex " + str(vertexNr-1) + " / " + str(vertexNr),
-                            tag="TOMs panel")
-                        #restGeom.deleteVertex(vertexNr)
-                        #restGeom.deleteVertex(vertexNr)
-                        sourceLineLayer.deleteVertex(currRestriction.id(), vertexNr)
-                        vertexDeleted = True
-
-                        QgsMessageLog.logMessage("Compared: curr  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(
-                            prevPt.x()) + " " + str(prevPt.y()),
-                            tag="TOMs panel")
-
-                if vertexNr > 1 and vertexDeleted is False:
-
-                    # check whether or not this point is on a line between the last two
-                    prevPtAgain = line[vertexNr-2]
-
-                    geomVertex = QgsGeometry.fromPoint(vertexPt)
-                    distToLine = geomVertex.shortestLine(QgsGeometry.fromPolyline([prevPt, prevPtAgain])).length()
-
-                    """QgsMessageLog.logMessage(
-                        "In removeDuplicatePoints. " + str(
-                            currRestriction.attribute("GeometryID")) + ": check for point on line between " + str(
-                            vertexNr - 1) + " / " + str(vertexNr),
-                        tag="TOMs panel")
-                    QgsMessageLog.logMessage(
-                        "Comparing: line  " + str(prevPtAgain.x()) + " " + str(prevPtAgain.y()) + " to " + str(
-                            prevPt.x()) + " " + str(prevPt.y()) + ". Point is " + str(vertexPt.x()) + " " + str(vertexPt.y()) +
-                            ". Dist is " + str(distToLine),
-                        tag="TOMs panel")"""
-
-                    if distToLine < tolerance:
-
-                        QgsMessageLog.logMessage(
-                            "In removeDuplicatePoints. " + str(
-                                currRestriction.attribute("GeometryID")) + ": Vertex " + str(vertexNr) + " is on line between previous two.",
-                            tag="TOMs panel")
-                        #restGeom.deleteVertex(vertexNr)
-                        sourceLineLayer.deleteVertex(currRestriction.id(), vertexNr)
-                        vertexDeleted = True
-
-                        QgsMessageLog.logMessage("Compared: curr  " + str(vertexPt.x()) + " " + str(vertexPt.y()) + " to " + str(
-                            prevPt.x()) + " " + str(prevPt.y()),
-                                                 tag="TOMs panel")
-
-            pass
-
-        editCommitStatus = sourceLineLayer.commitChanges()
+            if newShape:
+                TOMsMessageLog.logMessage("In removeDuplicatePoints. changes written ... ",
+                                         level=Qgis.Info)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
 
         #editCommitStatus = False
+        editCommitStatus = sourceLineLayer.commitChanges()
 
         if editCommitStatus is False:
             # save the active layer
@@ -1159,10 +1488,60 @@ class TOMsSnapTrace:
                                                 sourceLineLayer.commitErrors()),
                                             QMessageBox.Ok)
 
+    def checkRestrictionGeometryForDuplicatePoints(self, currRestrictionGeom, tolerance):
+        # function to remove duplicate points or ones that are colinear (?) or at least ones that double back
+
+        currRestrictionPtsList = currRestrictionGeom.asPolyline()
+        nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+
+        currVertexNr = 1
+        vertexA = currRestrictionPtsList[0]
+        shapeChanged = False
+
+        #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. nrVertices: " + str(nrVerticesInCurrRestriction), level=Qgis.Info)
+        #print ('Nr vertices: {}'.format(nrVerticesInCurrRestriction))
+        # Now, consider each vertex of the sourceLineLayer in turn - and create new geometry
+
+        while currVertexNr < (nrVerticesInCurrRestriction):
+
+            vertexB = currRestrictionPtsList[currVertexNr]
+
+            #print (vertexA, vertexB, vertexC)
+            if self.duplicatePoint(vertexA, vertexB):
+
+                #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. found overlaps at " + str(currVertexNr),                                          level=Qgis.Info)
+                #print ('In checkLineForSelfOverlap. found overlaps at {}'.format(currVertexNr))
+                # do not want currVertex within new restriction
+                currRestrictionPtsList.remove(currRestrictionPtsList[currVertexNr])
+                nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+                shapeChanged = True
+                #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. removing vertex" + str(currVertexNr),
+                #                         level=Qgis.Info)
+                #print ('In checkLineForSelfOverlap. removing vertex {}'.format(currVertexNr))
+                if currVertexNr > 1:
+                    currVertexNr = currVertexNr - 1
+
+                vertexA = currRestrictionPtsList[currVertexNr - 1]
+
+            else:
+
+                vertexA = vertexB
+                currVertexNr = currVertexNr + 1
+
+        if shapeChanged:
+            #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. changes written ... ",
+            #                         level=Qgis.Info)
+            #print ('In checkLineForSelfOverlap. changes written ...')
+            newShape = QgsGeometry.fromPolylineXY(currRestrictionPtsList)
+            return newShape
+
+        return None
+
+
     def removeShortLines(self, sourceLineLayer, tolerance):
         # function to remove duplicate points or ones that are colinear (?) or at least ones that double back
 
-        QgsMessageLog.logMessage("In removeShortLines", tag="TOMs panel")
+        TOMsMessageLog.logMessage("In removeShortLines", level=Qgis.Info)
 
         editStartStatus = sourceLineLayer.startEditing()
 
@@ -1183,20 +1562,19 @@ class TOMsSnapTrace:
         # For each restriction in layer
         for currRestriction in sourceLineLayer.getFeatures():
 
-            QgsMessageLog.logMessage(
+            TOMsMessageLog.logMessage(
                 "In removeShortLines. Considering " + str(currRestriction.attribute("GeometryID")),
-                tag="TOMs panel")
+                level=Qgis.Info)
 
             lenLine = currRestriction.geometry().length()
 
             if lenLine < tolerance:
-                QgsMessageLog.logMessage(
+                TOMsMessageLog.logMessage(
                     "In removeShortLines. ------------ Removing " + str(currRestriction.attribute("GeometryID")),
-                    tag="TOMs panel")
+                    level=Qgis.Info)
                 sourceLineLayer.deleteFeature(currRestriction.id())
 
         editCommitStatus = sourceLineLayer.commitChanges()
-
         #editCommitStatus = False
 
         if editCommitStatus is False:
@@ -1207,3 +1585,448 @@ class TOMsSnapTrace:
                                                 sourceLineLayer.commitErrors()),
                                             QMessageBox.Ok)
 
+    def checkSelfOverlaps(self, sourceLineLayer, tolerance):
+
+        """ This is really to check whether or not there is a problem with the trace tool """
+
+        TOMsMessageLog.logMessage("In checkSelfOverlaps " + sourceLineLayer.name(), level=Qgis.Warning)
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        """reply = QMessageBox.information(None, "Check",
+                                        "checkSelfOverlaps: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                            editStartStatus),
+                                        QMessageBox.Ok)"""
+
+        if editStartStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "checkSelfOverlaps: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+
+        for currRestriction in sourceLineLayer.getFeatures():
+
+            # get nearest snapLineLayer feature (using the second vertex as the test)
+
+            TOMsMessageLog.logMessage("In checkSelfOverlaps. Considering: {}".format(currRestriction.attribute("GeometryID")), level=Qgis.Warning)
+
+            currRestrictionGeom = currRestriction.geometry()
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In checkSelfOverlaps. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Warning)
+                continue
+
+            newShape = self.checkRestrictionGeometryForSelfOverlap(currRestrictionGeom, tolerance)
+
+            if newShape:
+                TOMsMessageLog.logMessage("In checkSelfOverlaps. changes written ... ",
+                                         level=Qgis.Warning)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+
+
+        TOMsMessageLog.logMessage("In checkOverlaps. Now finished layer ... ",
+                                         level=Qgis.Warning)
+        #editCommitStatus = False
+        editCommitStatus = sourceLineLayer.commitChanges()
+
+        if editCommitStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                sourceLineLayer.commitErrors()), QMessageBox.Ok)
+
+    def checkSelfOverlaps_2(self, sourceLineLayer, snapLineLayer, tolerance):
+
+        TOMsMessageLog.logMessage("In TraceRestriction2", level=Qgis.Info)
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        """reply = QMessageBox.information(None, "Check",
+                                        "TraceRestriction2: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                            editStartStatus),
+                                        QMessageBox.Ok)"""
+
+        if editStartStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "TraceRestriction2: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+
+        # set up shortest path checker
+        #self.setupTrace(snapLineLayer)
+
+        for currRestriction in sourceLineLayer.getFeatures():
+
+            TOMsMessageLog.logMessage("In TraceRestriction3. Considering " + str(currRestriction.attribute("GeometryID")),
+                                     level=Qgis.Info)
+            currRestrictionGeom = currRestriction.geometry()
+
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction3. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue
+
+            currRestrictionPtsList = currRestrictionGeom.asPolyline()
+
+            # now check each line segement ... (make assumption that line has already been traced, i.e., matches kerbline)
+            startPoint = currRestrictionPtsList[0]
+            endPoint = currRestrictionPtsList[len(currRestrictionPtsList) - 1]
+
+            # check that start/end points are on the kerb
+            """closestPointStart, closestFeatureStart = self.findNearestPointOnLineLayer(startPoint, snapLineLayer, tolerance)
+            closestPointEnd, closestFeatureEnd = self.findNearestPointOnLineLayer(endPoint, snapLineLayer, tolerance)
+
+            if not (closestPointStart and closestPointEnd):
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction3. *************** SKIPPING " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue"""
+
+            route = self.getShortestPath(startPoint, endPoint, snapLineLayer)
+            if not route:
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction3. *************** SKIPPING " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue
+
+            routeGeom = QgsGeometry.fromPolylineXY(route)
+            newShape = False
+
+            if route:
+                newShape = self.checkRestrictionGeometryForTracedVertices(currRestrictionGeom, routeGeom, tolerance)
+
+            if newShape:
+                TOMsMessageLog.logMessage("In TraceRestriction3. changes written ... ",
+                                         level=Qgis.Info)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+
+        #editCommitStatus = False
+        editCommitStatus = sourceLineLayer.commitChanges()
+
+        if editCommitStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                sourceLineLayer.commitErrors()), QMessageBox.Ok)
+
+
+    """ ***** """
+
+    def checkRestrictionGeometryForSelfOverlap(self, currRestrictionGeom, tolerance):
+
+        currRestrictionPtsList = currRestrictionGeom.asPolyline()
+        nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+
+        vertexA = currRestrictionPtsList[0]
+        vertexB = currRestrictionPtsList[1]
+
+        newRestrictionPtsList = []
+        newRestrictionPtsList.append(vertexA)
+        newRestrictionPtsList.append(vertexB)
+
+        currVertexNr = 1
+        shapeChanged = False
+
+        TOMsMessageLog.logMessage("In checkLineForSelfOverlap. nrVertices: {}".format(nrVerticesInCurrRestriction), level=Qgis.Warning)
+        #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. nrVertices: " + str(nrVerticesInCurrRestriction), level=Qgis.Info)
+        #print ('Nr vertices: {}'.format(nrVerticesInCurrRestriction))
+        # Now, consider each vertex of the sourceLineLayer in turn - and create new geometry
+
+        while currVertexNr < nrVerticesInCurrRestriction - 1:
+
+            vertexC = currRestrictionPtsList[currVertexNr + 1]
+
+            TOMsMessageLog.logMessage("In checkLineForSelfOverlap. considering pt {}".format(currVertexNr + 1),
+                                      level=Qgis.Info)
+            #print (vertexA, vertexB, vertexC)
+            if self.isBetween(vertexA, vertexB, vertexC, tolerance):
+
+                TOMsMessageLog.logMessage("In checkLineForSelfOverlap. found overlaps at {}".format(currVertexNr + 1), level=Qgis.Warning)
+                #print ('In checkLineForSelfOverlap. found overlaps at {}'.format(currVertexNr))
+                # do not want currVertex within new restriction
+                #currRestrictionPtsList.remove(currRestrictionPtsList[currVertexNr + 1])
+                #nrVerticesInCurrRestriction = len(currRestrictionPtsList)
+                shapeChanged = True
+                #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. removing vertex" + str(currVertexNr),
+                #                         level=Qgis.Info)
+                #print ('In checkLineForSelfOverlap. removing vertex {}'.format(currVertexNr))
+                #if currVertexNr > 1:
+                #    currVertexNr = currVertexNr - 1
+
+                #vertexA = currRestrictionPtsList[currVertexNr - 1]
+
+            else:
+
+                newRestrictionPtsList.append(vertexC)
+                vertexA = vertexB
+                vertexB = vertexC
+
+            currVertexNr = currVertexNr + 1
+
+        if shapeChanged:
+            TOMsMessageLog.logMessage("In checkLineForSelfOverlap. Shape changed. Nr of points now {} ... ".format(len(newRestrictionPtsList)), level=Qgis.Warning)
+            #print ('In checkLineForSelfOverlap. changes written ...')
+            newShape = QgsGeometry.fromPolylineXY(newRestrictionPtsList)
+            return newShape
+
+        return None
+
+    def lineOverlaps(self, vertexA, vertexB, vertexC):
+
+        prevDeltaX = vertexB.x() - vertexA.x()
+        prevDeltaY = vertexB.y() - vertexA.y()
+        currDeltaX = vertexC.x() - vertexB.x()
+        currDeltaY = vertexC.y() - vertexB.y()
+
+        dotProduct = currDeltaX * prevDeltaX + currDeltaY * prevDeltaY
+
+        if dotProduct < 0:
+            # candidate for overlap
+            # calculate the angle between the vectors
+            lenAB = math.sqrt(prevDeltaX**2 + prevDeltaY**2)
+            lenBC = math.sqrt(currDeltaX**2 + currDeltaY**2)
+
+            """if lenAB > 0 and lenBC > 0:
+                angle = math.acos (dotProduct / (lenAB * lenBC))
+
+                rem = angle % math.pi
+                #print ('angle: {}; rem: {}'.format(angle, rem))
+
+                if rem < SMALL_ANGLE_RADIANS:
+                    return True"""
+
+            lineAB_Geom = QgsGeometry.fromPolyline([QgsPoint(vertexA), QgsPoint(vertexB)])
+            lineBC_Geom = QgsGeometry.fromPolyline([QgsPoint(vertexB), QgsPoint(vertexC)])
+
+            intersectGeom = lineBC_Geom.intersection(lineAB_Geom)
+
+            if intersectGeom.type() == QgsWkbTypes.LineGeometry:
+                return True
+
+            """overlap = lineBC_Geom.overlaps(lineAB_Geom.buffer(0.01, 5))
+            if overlap:
+                return True"""
+
+        return False
+
+    def isBetween(self, pointA, pointB, pointC, delta=None):
+        # https://stackoverflow.com/questions/328107/how-can-you-determine-a-point-is-between-two-other-points-on-a-line-segment
+        # determines whether C lies on line A-B
+
+        if delta is None:
+            delta = 0.25
+
+        # check to see whether or not point C lies within a buffer for A-B
+        lineGeom_AB = QgsGeometry.fromPolylineXY([pointA, pointB])
+        TOMsMessageLog.logMessage("In isBetween:  lineGeom ********: " + lineGeom_AB.asWkt(), level=Qgis.Info)
+        buff = lineGeom_AB.buffer(delta, 0, QgsGeometry.CapFlat, QgsGeometry.JoinStyleBevel, 1.0)
+        #TOMsMessageLog.logMessage("In isBetween:  buff ********: " + buff.asWkt(), level=Qgis.Info)
+
+        if QgsGeometry.fromPointXY(pointC).intersects(buff):
+            # candidate. Now check simple distances
+            TOMsMessageLog.logMessage("In isBetween:  point is within buffer ...", level=Qgis.Info)
+            lineGeom_AC = QgsGeometry.fromPolylineXY([pointA, pointC])
+            lineGeom_BC = QgsGeometry.fromPolylineXY([pointB, pointC])
+            distAB = lineGeom_AB.length()
+            distAC = lineGeom_AC.length()
+            distBC = lineGeom_BC.length()
+
+            TOMsMessageLog.logMessage("In isBetween:  distances: {}; {}; {}".format(distAB, distAC, distBC), level=Qgis.Info)
+
+            if abs(distAB - distAC) > (distBC - delta):
+                return True
+
+        return False
+
+    def mergeGeometriesWithSameAttributes(self, sourceLineLayer):
+
+        """ This is really to check whether or not there is a problem with the trace tool """
+
+        checkFieldList = ["RestType", "GeomShapeID", "NrBays", "TimePeriodID", "PayTypeID",
+                          "MaxStayID", "NoReturnID", "NoWaitingTimeID", "NoLoadingTimeID", "Unacceptability", "RoadName"]
+
+        TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes " + sourceLineLayer.name(), level=Qgis.Info)
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        """reply = QMessageBox.information(None, "Check",
+                                        "mergeGeometriesWithSameAttributes: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
+                                            editStartStatus),
+                                        QMessageBox.Ok)"""
+
+        if editStartStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "mergeGeometriesWithSameAttributes: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+
+        # https://gis.stackexchange.com/questions/228267/merging-adjacent-lines-in-qgis
+
+        already_processed = []
+        for currRestriction in sourceLineLayer.getFeatures():
+
+            # get nearest snapLineLayer feature (using the second vertex as the test)
+
+            TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
+
+            currRestrictionGeom = currRestriction.geometry()
+
+            if currRestrictionGeom.isEmpty():
+                TOMsMessageLog.logMessage(
+                    "In mergeGeometriesWithSameAttributes. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Info)
+                continue
+
+            currRestrictionAttributes = currRestriction.attributes()
+            currGeometryID = currRestriction["GeometryID"]
+            if currGeometryID not in already_processed:
+
+                already_processed.append(currGeometryID)
+                newShape = self.checkConnectedRestrictionsWithSameAttributes(currRestriction, sourceLineLayer, checkFieldList, already_processed)
+
+                if newShape:
+                    TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. changes written ... ",
+                                             level=Qgis.Info)
+                    sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+                    already_processed.append(currGeometryID)
+
+        TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. Now finished layer ... ",
+                                         level=Qgis.Info)
+        #editCommitStatus = False
+        editCommitStatus = sourceLineLayer.commitChanges()
+
+        if editCommitStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                sourceLineLayer.commitErrors()), QMessageBox.Ok)
+
+    def checkConnectedRestrictionsWithSameAttributes(self, currRestriction, sourceLineLayer, checkFieldList, already_processed):
+
+        stillLinesToCheck = True
+        currRestrictionGeom = currRestriction.geometry()
+        currGeometryID = currRestriction["GeometryID"]
+        print ('******* checking: {}'.format(currGeometryID))
+        TOMsMessageLog.logMessage('******* checking: {}'.format(currGeometryID),
+                                 level=Qgis.Info)
+        shapeChanged = False
+
+        while stillLinesToCheck:
+
+            currRestrictionPtsList = currRestrictionGeom.asPolyline()
+
+            # get start/end points
+            startPoint = currRestrictionPtsList[0]
+            endPoint = currRestrictionPtsList[len(currRestrictionPtsList)-1]
+
+            print ('start: {}; end: {}'.format(startPoint.asWkt(), endPoint.asWkt()))
+
+            # find connected restrictions
+            nodeList = [startPoint, endPoint]
+            foundConnection = 0
+
+            print ('already_processed: {}'.format(already_processed))
+            print ('currRestrictionPtsList: {}'.format(currRestrictionPtsList))
+            TOMsMessageLog.logMessage('already_processed: {}'.format(already_processed),
+                                     level=Qgis.Info)
+            for node in nodeList:
+
+                node, feature = self.findNearestNodeOnLineLayer(node, sourceLineLayer,
+                                                                            DUPLICATE_POINT_DISTANCE,
+                                                                            already_processed)
+                print ('******* considering: {}'.format(node))
+                if node:
+                    print ('*** node: {}'.format(feature["GeometryID"]))
+                    TOMsMessageLog.logMessage('*** node: {}'.format(feature["GeometryID"]),
+                                             level=Qgis.Info)
+                    checkGeometryID = feature["GeometryID"]
+
+                    if not(checkGeometryID in already_processed) and self.sameRestrictionAttributes(currRestriction, feature, checkFieldList):
+                        print ('*** MERGING ***')
+                        TOMsMessageLog.logMessage('*** MERGING ***',
+                                                 level=Qgis.Info)
+                        newShape = self.mergeRestrictionGeometries(feature.geometry(), currRestrictionGeom)
+                        print (newShape)
+                        shapeChanged = True
+
+                        currRestrictionGeom = newShape # *******
+                        foundConnection = foundConnection + 1
+
+                        #with edit(sourceLineLayer):
+                        sourceLineLayer.deleteFeature(feature.id())
+
+                    already_processed.append(checkGeometryID)
+
+            if foundConnection == 0:
+                stillLinesToCheck = False
+
+        if shapeChanged:
+            #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. changes written ... ",
+            #                         level=Qgis.Info)
+            #print ('In checkLineForSelfOverlap. changes written ...')
+            newShape = QgsGeometry.fromPolylineXY(currRestrictionPtsList)
+            return newShape
+
+        return None
+
+    def sameRestrictionAttributes(self, restrictionA, restrictionB, checkFieldList):
+        # compare all relevant fields
+
+        for checkField in checkFieldList:
+            #print (checkField)
+            try:
+                #print ('{} -- A: {}; B: {}'.format(checkField, restrictionA[checkField], restrictionB[checkField]))
+                test = restrictionA[checkField] == restrictionB[checkField]
+            except Exception:
+                return False
+
+            if not test:
+                return False
+
+        return True
+
+    def mergeRestrictionGeometries(self, restrictionA_Geom, restrictionB_Geom):
+
+        # assume that nodes are snapped ??
+
+        restrictionA_PtsList = restrictionA_Geom.asPolyline()
+        startPointA = restrictionA_PtsList[0]
+        endPointA = restrictionA_PtsList[len(restrictionA_PtsList)-1]
+
+        restrictionB_PtsList = restrictionB_Geom.asPolyline()
+        startPointB = restrictionB_PtsList[0]
+        endPointB = restrictionB_PtsList[len(restrictionB_PtsList)-1]
+
+        # work out orientation of lines normal is endA - startB
+
+        if endPointA == startPointB:
+            pass
+        elif endPointA == endPointB:  # lines are going in opposite directions
+            restrictionB_PtsList.reverse()
+        elif startPointA == endPointB:  # lines are in same direction - just need to reverse order
+            tmp = restrictionA_PtsList
+            restrictionA_PtsList = restrictionB_PtsList
+            restrictionB_PtsList = tmp
+        elif startPointA == startPointB:  # lines in opposite directions and need to reverse order
+            restrictionB_PtsList.reverse()
+            tmp = restrictionA_PtsList
+            restrictionA_PtsList = restrictionB_PtsList
+            restrictionB_PtsList = tmp
+
+        restrictionB_PtsList.pop(0)  # remove the first (duplicated) point of the second line
+        restrictionA_PtsList.extend(restrictionB_PtsList)
+
+        newShape = QgsGeometry.fromPolylineXY(restrictionA_PtsList)
+
+        return newShape

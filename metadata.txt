@@ -8,7 +8,7 @@
 
 [general]
 name=TOMsSnapTrace
-qgisMinimumVersion=2.0
+qgisMinimumVersion=3.0
 description=snap and trace functions for TOMs
 version=0.1
 author=TH
