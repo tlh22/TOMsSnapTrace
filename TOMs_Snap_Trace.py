@@ -450,6 +450,12 @@ class SnapTraceUtils():
                     level=Qgis.Info)
                 continue
 
+            if currRestrictionGeom.length() < tolerance:
+                TOMsMessageLog.logMessage(
+                    "In removeDuplicatePoints. LENGTH less than tolerance FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Warning)
+                continue
+
             newShape = self.checkRestrictionGeometryForSnappedNodes(currRestrictionGeom, snapLineLayer, tolerance, currGeometryID)
 
             if newShape:
