@@ -1467,7 +1467,13 @@ class SnapTraceUtils():
             if currRestrictionGeom.isEmpty():
                 TOMsMessageLog.logMessage(
                     "In removeDuplicatePoints. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
-                    level=Qgis.Info)
+                    level=Qgis.Warning)
+                continue
+
+            if currRestrictionGeom.length() < tolerance:
+                TOMsMessageLog.logMessage(
+                    "In removeDuplicatePoints. LENGTH less than tolerance FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Warning)
                 continue
 
             newShape = self.checkRestrictionGeometryForDuplicatePoints(currRestrictionGeom, tolerance)
