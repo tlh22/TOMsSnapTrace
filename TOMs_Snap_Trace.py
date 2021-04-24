@@ -103,6 +103,9 @@ class TOMsSnapTrace:
             if qVersion() > '4.3.3':
                 QCoreApplication.installTranslator(self.translator)"""
 
+        # Set up local logging
+        loggingUtils = TOMsMessageLog()
+        loggingUtils.setLogFile()
 
         # Declare instance attributes
         self.actions = []
