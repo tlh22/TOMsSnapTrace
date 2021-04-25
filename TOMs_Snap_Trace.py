@@ -103,6 +103,9 @@ class TOMsSnapTrace:
             if qVersion() > '4.3.3':
                 QCoreApplication.installTranslator(self.translator)"""
 
+        # Set up local logging
+        loggingUtils = TOMsMessageLog()
+        loggingUtils.setLogFile()
 
         # Declare instance attributes
         self.actions = []
@@ -448,6 +451,12 @@ class SnapTraceUtils():
                 TOMsMessageLog.logMessage(
                     "In snapNodes. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
                     level=Qgis.Info)
+                continue
+
+            if currRestrictionGeom.length() < tolerance:
+                TOMsMessageLog.logMessage(
+                    "In removeDuplicatePoints. LENGTH less than tolerance FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Warning)
                 continue
 
             newShape = self.checkRestrictionGeometryForSnappedNodes(currRestrictionGeom, snapLineLayer, tolerance, currGeometryID)
@@ -1467,7 +1476,13 @@ class SnapTraceUtils():
             if currRestrictionGeom.isEmpty():
                 TOMsMessageLog.logMessage(
                     "In removeDuplicatePoints. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
-                    level=Qgis.Info)
+                    level=Qgis.Warning)
+                continue
+
+            if currRestrictionGeom.length() < tolerance:
+                TOMsMessageLog.logMessage(
+                    "In removeDuplicatePoints. LENGTH less than tolerance FOR: " + str(currRestriction.attribute("GeometryID")),
+                    level=Qgis.Warning)
                 continue
 
             newShape = self.checkRestrictionGeometryForDuplicatePoints(currRestrictionGeom, tolerance)
