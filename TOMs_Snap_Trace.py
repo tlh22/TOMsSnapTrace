@@ -265,7 +265,7 @@ class TOMsSnapTrace:
 
             if removeShortLines:
 
-                TOMsMessageLog.logMessage("********** Removing short lines", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** Removing short lines", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
 
@@ -273,14 +273,14 @@ class TOMsSnapTrace:
 
             if removeDuplicatePoints:
 
-                TOMsMessageLog.logMessage("********** Removing duplicate points", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** Removing duplicate points", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.removeDuplicatePoints(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
 
             if snapNodesToGNSS:
 
-                TOMsMessageLog.logMessage("********** Snapping nodes to GNSS points", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** Snapping nodes to GNSS points", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.snapNodesP(currRestrictionLayer, GNSS_Points, tolerance)
@@ -289,24 +289,24 @@ class TOMsSnapTrace:
                 # Snap end points together ...  (Perhaps could use a double loop here ...)
 
                 if Bays != Lines:
-                    TOMsMessageLog.logMessage("********** Snapping lines to bays ...", level=Qgis.Info)
+                    TOMsMessageLog.logMessage("********** Snapping lines to bays ...", level=Qgis.Warning)
                     utils.snapNodes(Lines, Bays, tolerance)
 
-                TOMsMessageLog.logMessage("********** Snapping bays to bays ...", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** Snapping bays to bays ...", level=Qgis.Warning)
                 utils.snapNodes(Bays, Bays, tolerance)
 
                 if Bays != Lines:
-                    TOMsMessageLog.logMessage("********** Snapping lines to lines ...", level=Qgis.Info)
+                    TOMsMessageLog.logMessage("********** Snapping lines to lines ...", level=Qgis.Warning)
                     utils.snapNodes(Lines, Lines, tolerance)
 
             if checkOverlapOption:
-                TOMsMessageLog.logMessage("********** checking overlaps ...", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** checking overlaps ...", level=Qgis.Warning)
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.checkSelfOverlaps (currRestrictionLayer, tolerance)
 
             if snapVerticesToKerb:
 
-                TOMsMessageLog.logMessage("********** Snapping vertices to kerb ...", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** Snapping vertices to kerb ...", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.snapVertices (currRestrictionLayer, Kerbline, tolerance)
@@ -316,7 +316,7 @@ class TOMsSnapTrace:
                 # Now trace ...
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
 
-                TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.TraceRestriction3 (currRestrictionLayer, Kerbline, tolerance)
@@ -328,7 +328,7 @@ class TOMsSnapTrace:
                 # Now trace ...
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
 
-                TOMsMessageLog.logMessage("********** removePointsOutsideTolerance ...", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** removePointsOutsideTolerance ...", level=Qgis.Warning)
                 utils.removePointsOutsideTolerance (Bays, Kerbline, tolerance)
 
             if mergeGeometries:
@@ -336,7 +336,7 @@ class TOMsSnapTrace:
                 # Now trace ...
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
 
-                TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Info)
+                TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.mergeGeometriesWithSameAttributes (currRestrictionLayer)
@@ -434,7 +434,7 @@ class SnapTraceUtils():
         if editStartStatus is False:
             # save the active layer
 
-            TOMsMessageLog.logMessage("Error: snapNodesL: Not able to start transaction on " + sourceLineLayer.name())
+            TOMsMessageLog.logMessage("Error: snapNodesL: Not able to start transaction on " + sourceLineLayer.name(), level=Qgis.Warning)
             reply = QMessageBox.information(None, "Error",
                                             "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
@@ -478,7 +478,7 @@ class SnapTraceUtils():
         if editCommitStatus is False:
             # save the active layer
             TOMsMessageLog.logMessage("Error: snapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
-                sourceLineLayer.commitErrors()))
+                sourceLineLayer.commitErrors()), level=Qgis.Warning)
             reply = QMessageBox.information(None, "Error",
                                             "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
                                                 sourceLineLayer.commitErrors()),
@@ -519,7 +519,7 @@ class SnapTraceUtils():
 
         if editStartStatus is False:
             # save the active layer
-            TOMsMessageLog.logMessage("Error: snapVertices: Not able to start transaction on " + sourceLineLayer.name())
+            TOMsMessageLog.logMessage("Error: snapVertices: Not able to start transaction on " + sourceLineLayer.name(), level=Qgis.Warning)
             reply = QMessageBox.information(None, "Error",
                                             "Not able to start transaction on " + sourceLineLayer.name(),
                                             QMessageBox.Ok)
@@ -1117,7 +1117,7 @@ class SnapTraceUtils():
 
     def TraceRestriction3(self, sourceLineLayer, snapLineLayer, tolerance):
 
-        TOMsMessageLog.logMessage("In TraceRestriction2", level=Qgis.Info)
+        TOMsMessageLog.logMessage("In TraceRestriction3", level=Qgis.Info)
 
         editStartStatus = sourceLineLayer.startEditing()
 
@@ -1140,13 +1140,13 @@ class SnapTraceUtils():
         for currRestriction in sourceLineLayer.getFeatures():
 
             TOMsMessageLog.logMessage("In TraceRestriction3. Considering " + str(currRestriction.attribute("GeometryID")),
-                                     level=Qgis.Info)
+                                     level=Qgis.Warning)
             currRestrictionGeom = currRestriction.geometry()
 
             if currRestrictionGeom.isEmpty():
                 TOMsMessageLog.logMessage(
                     "In TraceRestriction3. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
-                    level=Qgis.Info)
+                    level=Qgis.Warning)
                 continue
 
             currRestrictionPtsList = currRestrictionGeom.asPolyline()
@@ -1167,7 +1167,7 @@ class SnapTraceUtils():
             if not route:
                 TOMsMessageLog.logMessage(
                     "In TraceRestriction3. *************** SKIPPING " + str(currRestriction.attribute("GeometryID")),
-                    level=Qgis.Info)
+                    level=Qgis.Warning)
                 continue
 
             routeGeom = QgsGeometry.fromPolylineXY(route)
@@ -1178,7 +1178,7 @@ class SnapTraceUtils():
 
             if newShape:
                 TOMsMessageLog.logMessage("In TraceRestriction3. changes written ... ",
-                                         level=Qgis.Info)
+                                         level=Qgis.Warning)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
 
         #editCommitStatus = False
@@ -1469,7 +1469,7 @@ class SnapTraceUtils():
 
         for currRestriction in sourceLineLayer.getFeatures():
 
-            TOMsMessageLog.logMessage("In removeDuplicatePoints. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
+            TOMsMessageLog.logMessage("In removeDuplicatePoints. Considering: " + str(currRestriction.attribute("GeometryID")), level=Qgis.Info)
 
             currRestrictionGeom = currRestriction.geometry()
 
@@ -1892,7 +1892,7 @@ class SnapTraceUtils():
 
             # get nearest snapLineLayer feature (using the second vertex as the test)
 
-            TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. Considering: " + str(currRestriction.attribute("GeometryID")), tag = "TOMs panel")
+            TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. Considering: " + str(currRestriction.attribute("GeometryID")), level=Qgis.Info)
 
             currRestrictionGeom = currRestriction.geometry()
 
