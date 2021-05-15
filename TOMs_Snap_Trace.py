@@ -1203,7 +1203,7 @@ class SnapTraceUtils():
 
         for currRestriction in restrictionIterator:  # TODO: Order by GeometryID
 
-            TOMsMessageLog.logMessage("In TraceRestriction3. Considering " + str(currRestriction.attribute("GeometryID")),
+            TOMsMessageLog.logMessage("In TraceRestriction3. Considering {}: {}".format(featureCount, currRestriction.attribute("GeometryID")),
                                      level=Qgis.Warning)
             currRestrictionGeom = currRestriction.geometry()
 
@@ -1282,7 +1282,7 @@ class SnapTraceUtils():
                 if editStartStatus is False:
                     # save the active layer
                     reply = QMessageBox.information(None, "Error",
-                                                    "TraceRestriction2: Not able to start transaction on " + sourceLineLayer.name(),
+                                                    "TraceRestriction3: Not able to start transaction on " + sourceLineLayer.name(),
                                                     QMessageBox.Ok)
                     return
 
