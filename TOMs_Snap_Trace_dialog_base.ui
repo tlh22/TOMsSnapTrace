@@ -141,6 +141,20 @@
      </property>
     </widget>
    </item>
+   <item row="3" column="0">
+    <widget class="QCheckBox" name="cb_restart_bays">
+     <property name="text">
+      <string> Restart</string>
+     </property>
+    </widget>
+   </item>
+   <item row="5" column="0">
+    <widget class="QCheckBox" name="cb_restart_lines">
+     <property name="text">
+      <string> Restart</string>
+     </property>
+    </widget>
+   </item>
   </layout>
  </widget>
  <customwidgets>

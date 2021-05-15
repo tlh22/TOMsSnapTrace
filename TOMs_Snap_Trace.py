@@ -70,6 +70,7 @@ from resources import *
 # Import the code for the dialog
 from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 from TOMs.core.TOMsMessageLog import TOMsMessageLog
+from TOMs.restrictionTypeUtilsClass import TOMsConfigFile
 
 DUPLICATE_POINT_DISTANCE = 0.02
 SMALL_ANGLE_RADIANS = 0.0001
@@ -230,6 +231,8 @@ class TOMsSnapTrace:
             traceKerbline = False
             removePointsOutsideTolerance = False
             mergeGeometries = False
+            restart_bays = False
+            restart_lines = False
 
             if self.dlg.rb_removeShortLines.isChecked():
                 removeShortLines = True
@@ -257,6 +260,12 @@ class TOMsSnapTrace:
 
             """if self.dlg.rb_removePointsOutsideTolerance.isChecked():
                 removePointsOutsideTolerance = True"""
+
+            if self.dlg.cb_restart_bays.isChecked():
+                restart_bays = True
+
+            if self.dlg.cb_restart_lines.isChecked():
+                restart_lines = True
 
             if Bays == Lines:
                 listRestrictionLayers = [Bays]
@@ -319,7 +328,7 @@ class TOMsSnapTrace:
                 TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
-                    utils.TraceRestriction3 (currRestrictionLayer, Kerbline, tolerance)
+                    utils.TraceRestriction3 (currRestrictionLayer, Kerbline, tolerance, restart_bays)
 
             # Set up all the layers - in init ...
 
@@ -1136,7 +1145,7 @@ class SnapTraceUtils():
 
         return route
 
-    def TraceRestriction3(self, sourceLineLayer, snapLineLayer, tolerance):
+    def TraceRestriction3(self, sourceLineLayer, snapLineLayer, tolerance, restart):
 
         TOMsMessageLog.logMessage("In TraceRestriction3", level=Qgis.Info)
 
@@ -1158,7 +1167,41 @@ class SnapTraceUtils():
         # set up shortest path checker
         #self.setupTrace(snapLineLayer)
 
-        for currRestriction in sourceLineLayer.getFeatures():
+
+        featureCount = 0
+
+        """ Loop through all features in layer - ordered by GeometryID - https://gis.stackexchange.com/questions/138769/is-it-possible-to-sort-the-features-by-an-attribute-programmatically """
+        request = QgsFeatureRequest()
+        clause = QgsFeatureRequest.OrderByClause('GeometryID', ascending=True)
+        orderby = QgsFeatureRequest.OrderBy([clause])
+        request.setOrderBy(orderby)
+
+        restrictionIterator = sourceLineLayer.getFeatures(request)
+
+        if restart == True:
+            # prepare config file
+
+            TOMsMessageLog.logMessage(
+                "In TraceRestriction3. Restart requested ... ",
+                level=Qgis.Warning)
+
+            self.configFileFound = True
+            self.TOMsConfigFileObject = TOMsConfigFile()
+            self.TOMsConfigFileObject.TOMsConfigFileNotFound.connect(self.configFileNotFound)
+
+            if self.configFileFound:
+                self.TOMsConfigFileObject.initialiseTOMsConfigFile()
+                featureCount = int(self.getRestartValue(sourceLineLayer.name())) - 1
+                TOMsMessageLog.logMessage(
+                    "In TraceRestriction3. Restarting at {} ... ".format(featureCount),
+                    level=Qgis.Warning)
+
+                i = 0
+                while i < featureCount:
+                    _ = next(restrictionIterator)
+                    i = i + 1
+
+        for currRestriction in restrictionIterator:  # TODO: Order by GeometryID
 
             TOMsMessageLog.logMessage("In TraceRestriction3. Considering " + str(currRestriction.attribute("GeometryID")),
                                      level=Qgis.Warning)
@@ -1224,6 +1267,27 @@ class SnapTraceUtils():
                                          level=Qgis.Warning)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
 
+            if featureCount%100 == 0:   # save changes after processing 100 features  TODO: can we do a restart based on the last saved item?
+
+                TOMsMessageLog.logMessage("In TraceRestriction3. saving changes ... {}".format(featureCount),
+                                          level=Qgis.Warning)
+                editCommitStatus = sourceLineLayer.commitChanges()
+                if editCommitStatus is False:
+                    # save the active layer
+                    reply = QMessageBox.information(None, "Error",
+                                                    "Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                        sourceLineLayer.commitErrors()), QMessageBox.Ok)
+                # restart editing
+                editStartStatus = sourceLineLayer.startEditing()
+                if editStartStatus is False:
+                    # save the active layer
+                    reply = QMessageBox.information(None, "Error",
+                                                    "TraceRestriction2: Not able to start transaction on " + sourceLineLayer.name(),
+                                                    QMessageBox.Ok)
+                    return
+
+                # TODO: set restart value for layer
+
         #editCommitStatus = False
         editCommitStatus = sourceLineLayer.commitChanges()
 
@@ -1233,6 +1297,17 @@ class SnapTraceUtils():
             reply = QMessageBox.information(None, "Error",
                                             "Changes to " + sourceLineLayer.name() + " failed: " + str(
                                                 sourceLineLayer.commitErrors()), QMessageBox.Ok)
+    def configFileNotFound(self):
+        self.configFileFound = False
+        QMessageBox.information(None, "ERROR", ("Config file not found ..."))
+
+    def getRestartValue(self, layerName):
+        configName = layerName + '.Restart'
+        value = self.TOMsConfigFileObject.getTOMsConfigElement('TOMsSnapTrace', configName)
+        if value:
+            return value
+        return 0
+
 
     """ ***** """
     def checkRestrictionGeometryForTracedVertices(self, currRestrictionGeom, routeGeom, tolerance):
