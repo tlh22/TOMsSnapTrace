@@ -1203,6 +1203,8 @@ class SnapTraceUtils():
 
         for currRestriction in restrictionIterator:  # TODO: Order by GeometryID
 
+            featureCount = featureCount + 1
+            
             TOMsMessageLog.logMessage("In TraceRestriction3. Considering {}: {}".format(featureCount, currRestriction.attribute("GeometryID")),
                                      level=Qgis.Warning)
             currRestrictionGeom = currRestriction.geometry()
