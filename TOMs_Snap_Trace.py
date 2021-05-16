@@ -1204,7 +1204,7 @@ class SnapTraceUtils():
         for currRestriction in restrictionIterator:  # TODO: Order by GeometryID
 
             featureCount = featureCount + 1
-            
+
             TOMsMessageLog.logMessage("In TraceRestriction3. Considering {}: {}".format(featureCount, currRestriction.attribute("GeometryID")),
                                      level=Qgis.Warning)
             currRestrictionGeom = currRestriction.geometry()
@@ -1253,6 +1253,13 @@ class SnapTraceUtils():
                     if vertexNr == 0:
                         route = sectionRoute
                     else:
+                        if not sectionRoute:
+                            route = None  # jumped to different kerb line
+                            TOMsMessageLog.logMessage(
+                                "In TraceRestriction3. *************** SKIPPING " + str(
+                                    currRestriction.attribute("GeometryID")),
+                                level=Qgis.Warning)
+                            break
                         route.extend(sectionRoute[1:])  # don't repeat the first point
 
                 routeGeom = QgsGeometry.fromPolylineXY(route)
