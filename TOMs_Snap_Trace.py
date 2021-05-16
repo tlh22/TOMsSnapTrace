@@ -1262,6 +1262,9 @@ class SnapTraceUtils():
                             break
                         route.extend(sectionRoute[1:])  # don't repeat the first point
 
+                if not route:
+                    continue
+
                 routeGeom = QgsGeometry.fromPolylineXY(route)
 
             TOMsMessageLog.logMessage("In TraceRestriction3. route length = {}".format(routeGeom.length()),
