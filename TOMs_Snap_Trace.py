@@ -1258,13 +1258,13 @@ class SnapTraceUtils():
                             route.extend(sectionRoute[1:])  # don't repeat the first point
                         except Exception as e:
                             route = None  # jumped to different kerb line
-                            TOMsMessageLog.logMessage(
-                                "In TraceRestriction3. *************** SKIPPING " + str(
-                                    currRestriction.attribute("GeometryID")),
-                                level=Qgis.Warning)
                             break
-                            
+
                 if not route:
+                    TOMsMessageLog.logMessage(
+                        "In TraceRestriction3. *************** SKIPPING " + str(
+                            currRestriction.attribute("GeometryID")),
+                        level=Qgis.Warning)
                     continue
 
                 routeGeom = QgsGeometry.fromPolylineXY(route)
