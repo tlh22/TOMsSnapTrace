@@ -1253,15 +1253,17 @@ class SnapTraceUtils():
                     if vertexNr == 0:
                         route = sectionRoute
                     else:
-                        if not sectionRoute:
+
+                        try:
+                            route.extend(sectionRoute[1:])  # don't repeat the first point
+                        except Exception as e:
                             route = None  # jumped to different kerb line
                             TOMsMessageLog.logMessage(
                                 "In TraceRestriction3. *************** SKIPPING " + str(
                                     currRestriction.attribute("GeometryID")),
                                 level=Qgis.Warning)
                             break
-                        route.extend(sectionRoute[1:])  # don't repeat the first point
-
+                            
                 if not route:
                     continue
 
