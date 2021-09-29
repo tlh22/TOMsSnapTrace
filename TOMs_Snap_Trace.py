@@ -71,6 +71,8 @@ from resources import *
 from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 from TOMs.core.TOMsMessageLog import TOMsMessageLog
 from TOMs.restrictionTypeUtilsClass import TOMsConfigFile
+from TOMsImport.snapTraceUtilsMixin import snapTraceUtilsMixin
+from TOMs.generateGeometryUtils import generateGeometryUtils
 
 DUPLICATE_POINT_DISTANCE = 0.02
 SMALL_ANGLE_RADIANS = 0.0001
@@ -202,6 +204,7 @@ class TOMsSnapTrace:
         if result:
 
             utils = SnapTraceUtils()
+
             # Set up variables to layers - maybe obtained from form ??
 
             indexBaysLayer = self.dlg.baysLayer.currentIndex()
@@ -287,6 +290,14 @@ class TOMsSnapTrace:
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.removeDuplicatePoints(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
 
+                # Also check for kickbacks
+
+                TOMsMessageLog.logMessage("********** Checking for kick backs", level=Qgis.Warning)
+
+                for currRestrictionLayer in listRestrictionLayers:
+                    utils.checkKickBacks(currRestrictionLayer, DUPLICATE_POINT_DISTANCE)
+
+
             """if snapNodesToGNSS:
 
                 TOMsMessageLog.logMessage("********** Snapping nodes to GNSS points", level=Qgis.Warning)
@@ -357,7 +368,7 @@ class TOMsSnapTrace:
 class SnapTraceUtils():
 
     def __init__(self):
-        pass
+        self.importUtils = snapTraceUtilsMixin()
 
         """def snapNodesP(self, sourceLineLayer, snapPointLayer, tolerance):
 
@@ -1631,6 +1642,45 @@ class SnapTraceUtils():
                 TOMsMessageLog.logMessage("In removeDuplicatePoints. changes written ... ",
                                          level=Qgis.Info)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
+
+        #editCommitStatus = False
+        editCommitStatus = sourceLineLayer.commitChanges()
+
+        if editCommitStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                sourceLineLayer.commitErrors()),
+                                            QMessageBox.Ok)
+
+    def checkKickBacks(self, sourceLineLayer, tolerance):
+
+        TOMsMessageLog.logMessage("In checkKickBacks", level=Qgis.Info)
+
+        editStartStatus = sourceLineLayer.startEditing()
+
+        if editStartStatus is False:
+            # save the active layer
+
+            reply = QMessageBox.information(None, "Error",
+                                            "checkKickBacks: Not able to start transaction on " + sourceLineLayer.name(),
+                                            QMessageBox.Ok)
+            return
+        # Read through each restriction and compare successive points
+
+        for currRestriction in sourceLineLayer.getFeatures():
+
+            TOMsMessageLog.logMessage("In checkKickBacks. Considering: " + str(currRestriction.attribute("GeometryID")), level=Qgis.Warning)
+
+            origLine = generateGeometryUtils.getLineForAz(currRestriction)
+            newShape = self.importUtils.removeKickBackVertices(origLine, tolerance)
+
+            if len(origLine) > len(newShape):
+                TOMsMessageLog.logMessage("In checkKickBacks. changes written ... ",
+                                         level=Qgis.Warning)
+                newLine = QgsGeometry.fromPolylineXY(newShape)
+                sourceLineLayer.changeGeometry(currRestriction.id(), newLine)
 
         #editCommitStatus = False
         editCommitStatus = sourceLineLayer.commitChanges()
