@@ -63,9 +63,9 @@ TEST_DATA_DIR = unitTestDataPath()
 """
 
 from TOMs_Snap_Trace import TOMsSnapTrace, SnapTraceUtils
+#from TOMs_Snap_Trace.test.utilities import get_qgis_app
 
-from utilities import get_qgis_app
-QGIS_APP = get_qgis_app()
+#QGIS_APP = get_qgis_app()
 
 """qgs = QgsApplication([], False)
 QgsApplication.setPrefixPath("C:\QGIS_310\apps\qgis-ltr", True)

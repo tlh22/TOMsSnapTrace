@@ -438,19 +438,22 @@ class SnapTraceUtils():
 
         TOMsMessageLog.logMessage("In snapNodes", level=Qgis.Info)
 
-        editStartStatus = sourceLineLayer.startEditing()
 
-        if editStartStatus is False:
-            # save the active layer
-
-            TOMsMessageLog.logMessage("Error: snapNodesL: Not able to start transaction on " + sourceLineLayer.name(), level=Qgis.Warning)
-            reply = QMessageBox.information(None, "Error",
-                                            "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
-                                            QMessageBox.Ok)
-            return
 
         # For each restriction in layer
         for currRestriction in sourceLineLayer.getFeatures():
+
+            editStartStatus = sourceLineLayer.startEditing()
+
+            if editStartStatus is False:
+                # save the active layer
+
+                TOMsMessageLog.logMessage(
+                    "Error: snapNodes: Not able to start transaction on " + sourceLineLayer.name(), level=Qgis.Warning)
+                reply = QMessageBox.information(None, "Error",
+                                                "snapNodesL: Not able to start transaction on " + sourceLineLayer.name(),
+                                                QMessageBox.Ok)
+                return
 
             TOMsMessageLog.logMessage("In snapNodes. Considering " + str(currRestriction.attribute("GeometryID")), level=Qgis.Info)
             currRestrictionGeom = currRestriction.geometry()
@@ -464,7 +467,7 @@ class SnapTraceUtils():
 
             if currRestrictionGeom.length() < tolerance:
                 TOMsMessageLog.logMessage(
-                    "In removeDuplicatePoints. LENGTH less than tolerance FOR: " + str(currRestriction.attribute("GeometryID")),
+                    "In snapNodes. LENGTH less than tolerance FOR: " + str(currRestriction.attribute("GeometryID")),
                     level=Qgis.Warning)
                 continue
 
@@ -475,23 +478,23 @@ class SnapTraceUtils():
                                          level=Qgis.Info)
                 sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
 
-        #editCommitStatus = False
+            #editCommitStatus = False
 
-        editCommitStatus = sourceLineLayer.commitChanges()
+            editCommitStatus = sourceLineLayer.commitChanges()
 
-        """reply = QMessageBox.information(None, "Check",
-                                        "SnapNodes: Status for commit to " + sourceLineLayer.name() + " is: " + str(
-                                            editCommitStatus),
-                                        QMessageBox.Ok)"""
+            """reply = QMessageBox.information(None, "Check",
+                                            "SnapNodes: Status for commit to " + sourceLineLayer.name() + " is: " + str(
+                                                editCommitStatus),
+                                            QMessageBox.Ok)"""
 
-        if editCommitStatus is False:
-            # save the active layer
-            TOMsMessageLog.logMessage("Error: snapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
-                sourceLineLayer.commitErrors()), level=Qgis.Warning)
-            reply = QMessageBox.information(None, "Error",
-                                            "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
-                                                sourceLineLayer.commitErrors()),
-                                            QMessageBox.Ok)
+            if editCommitStatus is False:
+                # save the active layer
+                TOMsMessageLog.logMessage("Error: snapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                    sourceLineLayer.commitErrors()), level=Qgis.Warning)
+                reply = QMessageBox.information(None, "Error",
+                                                "SnapNodes: Changes to " + sourceLineLayer.name() + " failed: " + str(
+                                                    sourceLineLayer.commitErrors()),
+                                                QMessageBox.Ok)
 
         return
 
@@ -725,6 +728,7 @@ class SnapTraceUtils():
             # add the geometry to the feature,
             #nearestPoint.setGeometry(QgsGeometry(closestPtOnFeature))
             #TOMsMessageLog.logMessage("findNearestPointL: nearestPoint geom type: " + str(nearestPoint.wkbType()), level=Qgis.Info)
+            TOMsMessageLog.logMessage("findNearestPointL: nearestPoint: {}".format(f.attribute("GeometryID")), level=Qgis.Info)
             return closestPoint, closestFeature   # returns a geometry
         else:
             return None, None
