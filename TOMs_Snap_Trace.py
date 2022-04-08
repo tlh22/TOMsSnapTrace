@@ -2005,8 +2005,7 @@ class SnapTraceUtils():
 
         """ This is really to check whether or not there is a problem with the trace tool """
 
-        checkFieldList = ["RestType", "GeomShapeID", "NrBays", "TimePeriodID", "PayTypeID",
-                          "MaxStayID", "NoReturnID", "NoWaitingTimeID", "NoLoadingTimeID", "Unacceptability", "RoadName"]
+        checkFieldList = []
 
         TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes " + sourceLineLayer.name(), level=Qgis.Info)
 
@@ -2166,18 +2165,30 @@ class SnapTraceUtils():
         # work out orientation of lines normal is endA - startB
 
         if endPointA == startPointB:
+            TOMsMessageLog.logMessage('In mergeRestrictionGeometries: case 1',
+                                      level=Qgis.Info)
             pass
         elif endPointA == endPointB:  # lines are going in opposite directions
+            TOMsMessageLog.logMessage('In mergeRestrictionGeometries: case 2',
+                                      level=Qgis.Info)
             restrictionB_PtsList.reverse()
         elif startPointA == endPointB:  # lines are in same direction - just need to reverse order
+            TOMsMessageLog.logMessage('In mergeRestrictionGeometries: case 3a. lenA: {}; lenB: {}'.format(len(restrictionA_PtsList), len(restrictionB_PtsList)),
+                                      level=Qgis.Info)
             tmp = restrictionA_PtsList
             restrictionA_PtsList = restrictionB_PtsList
             restrictionB_PtsList = tmp
+            TOMsMessageLog.logMessage('In mergeRestrictionGeometries: case 3b. lenA: {}; lenB: {}'.format(len(restrictionA_PtsList), len(restrictionB_PtsList)),
+                                      level=Qgis.Info)
         elif startPointA == startPointB:  # lines in opposite directions and need to reverse order
+            TOMsMessageLog.logMessage('In mergeRestrictionGeometries: case 4a. lenA: {}; lenB: {}'.format(len(restrictionA_PtsList), len(restrictionB_PtsList)),
+                                      level=Qgis.Info)
             restrictionB_PtsList.reverse()
             tmp = restrictionA_PtsList
             restrictionA_PtsList = restrictionB_PtsList
             restrictionB_PtsList = tmp
+            TOMsMessageLog.logMessage('In mergeRestrictionGeometries: case 4b. lenA: {}; lenB: {}'.format(len(restrictionA_PtsList), len(restrictionB_PtsList)),
+                                      level=Qgis.Info)
 
         restrictionB_PtsList.pop(0)  # remove the first (duplicated) point of the second line
         restrictionA_PtsList.extend(restrictionB_PtsList)
