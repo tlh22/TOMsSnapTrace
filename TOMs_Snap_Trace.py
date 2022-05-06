@@ -1112,25 +1112,30 @@ class SnapTraceUtils():
         :return:
         """
 
-        self.director = QgsVectorLayerDirector(layer, -1, '', '', '', QgsVectorLayerDirector.DirectionBoth)
+        director = QgsVectorLayerDirector(layer, -1, '', '', '', QgsVectorLayerDirector.DirectionBoth)
         strategy = QgsNetworkDistanceStrategy()
-        self.director.addStrategy(strategy)
-        self.builder = QgsGraphBuilder(layer.crs())
+        director.addStrategy(strategy)
+        builder = QgsGraphBuilder(layer.crs(), False)
 
         TOMsMessageLog.logMessage("In getShortestPath: startPt: " + graphPtsList[0].asWkt(),
                                  level=Qgis.Info)
-        tiedPoints = self.director.makeGraph(self.builder, graphPtsList)
-        #TOMsMessageLog.logMessage("tiedPoints: {}".format(tiedPoints), level=Qgis.Info)
+        tiedPoints = director.makeGraph(builder, graphPtsList)
+        TOMsMessageLog.logMessage("tiedPoints: {}".format(tiedPoints), level=Qgis.Info)
         tStart = tiedPoints[0]
         tStop = tiedPoints[-1]
 
-        graph = self.builder.graph()
+        graph = builder.graph()
         idxStart = graph.findVertex(tStart)
+        TOMsMessageLog.logMessage("In getShortestPath: vertexCount: {}".format(graph.vertexCount()),
+                                 level=Qgis.Info)
 
         tree = QgsGraphAnalyzer.shortestTree(graph, idxStart, 0)
 
         idxStart = tree.findVertex(tStart)
         idxEnd = tree.findVertex(tStop)
+
+        TOMsMessageLog.logMessage("In getShortestPath: idxStart: {}; idxEnd: {}".format(idxStart, idxEnd),
+                                 level=Qgis.Info)
 
         if idxEnd == -1:
             return None
@@ -1234,9 +1239,9 @@ class SnapTraceUtils():
                 continue"""
 
             graphPtsList = [startPoint, endPoint]
-            if len(currRestrictionPtsList) > 2:
+            """if len(currRestrictionPtsList) > 2:
                 midPoint = currRestrictionPtsList[int(len(currRestrictionPtsList)/2)]
-                graphPtsList.insert(1, midPoint)
+                graphPtsList.insert(1, midPoint)"""
             route = self.getShortestPath(graphPtsList, snapLineLayer)
             if not route:
                 TOMsMessageLog.logMessage(
