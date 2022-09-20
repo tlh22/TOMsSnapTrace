@@ -72,7 +72,8 @@ from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 from TOMs.core.TOMsMessageLog import TOMsMessageLog
 from TOMs.restrictionTypeUtilsClass import TOMsConfigFile
 
-DUPLICATE_POINT_DISTANCE = 0.02
+DUPLICATE_POINT_DISTANCE = 0.1
+MERGE_DISTANCE = 0.1
 SMALL_ANGLE_RADIANS = 0.0001
 
 class TOMsSnapTrace:
@@ -345,7 +346,7 @@ class TOMsSnapTrace:
                 # Now trace ...
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
 
-                TOMsMessageLog.logMessage("********** Tracing kerb ...", level=Qgis.Warning)
+                TOMsMessageLog.logMessage("********** Merge geometries...", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
                     utils.mergeGeometriesWithSameAttributes (currRestrictionLayer)
@@ -728,7 +729,7 @@ class SnapTraceUtils():
             # add the geometry to the feature,
             #nearestPoint.setGeometry(QgsGeometry(closestPtOnFeature))
             #TOMsMessageLog.logMessage("findNearestPointL: nearestPoint geom type: " + str(nearestPoint.wkbType()), level=Qgis.Info)
-            TOMsMessageLog.logMessage("findNearestPointL: nearestPoint: {}".format(f.attribute("GeometryID")), level=Qgis.Info)
+            TOMsMessageLog.logMessage("findNearestPointOnLineLayer: nearestPoint: {}".format(f.attribute("GeometryID")), level=Qgis.Warning)
             return closestPoint, closestFeature   # returns a geometry
         else:
             return None, None
@@ -2014,10 +2015,14 @@ class SnapTraceUtils():
 
         """ This is really to check whether or not there is a problem with the trace tool """
 
-        checkFieldList = ["RestType", "GeomShapeID", "NrBays", "TimePeriodID", "PayTypeID",
-                          "MaxStayID", "NoReturnID", "NoWaitingTimeID", "NoLoadingTimeID", "Unacceptability", "RoadName"]
+        checkFieldList = ["RestrictionTypeID", "GeomShapeID",
+                          #"NrBays",
+                          "TimePeriodID",
+                          "PayTypeID", "MaxStayID", "NoReturnID",
+                          #"NoWaitingTimeID", "NoLoadingTimeID", "Unacceptability",
+                          "RoadName"]
 
-        TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes " + sourceLineLayer.name(), level=Qgis.Info)
+        TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes " + sourceLineLayer.name(), level=Qgis.Warning)
 
         editStartStatus = sourceLineLayer.startEditing()
 
@@ -2041,14 +2046,14 @@ class SnapTraceUtils():
 
             # get nearest snapLineLayer feature (using the second vertex as the test)
 
-            TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. Considering: " + str(currRestriction.attribute("GeometryID")), level=Qgis.Info)
+            TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. Considering: " + str(currRestriction.attribute("GeometryID")), level=Qgis.Warning)
 
             currRestrictionGeom = currRestriction.geometry()
 
             if currRestrictionGeom.isEmpty():
                 TOMsMessageLog.logMessage(
                     "In mergeGeometriesWithSameAttributes. NO GEOMETRY FOR: " + str(currRestriction.attribute("GeometryID")),
-                    level=Qgis.Info)
+                    level=Qgis.Warning)
                 continue
 
             currRestrictionAttributes = currRestriction.attributes()
@@ -2060,12 +2065,12 @@ class SnapTraceUtils():
 
                 if newShape:
                     TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. changes written ... ",
-                                             level=Qgis.Info)
+                                             level=Qgis.Warning)
                     sourceLineLayer.changeGeometry(currRestriction.id(), newShape)
                     already_processed.append(currGeometryID)
 
         TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes. Now finished layer ... ",
-                                         level=Qgis.Info)
+                                         level=Qgis.Warning)
         #editCommitStatus = False
         editCommitStatus = sourceLineLayer.commitChanges()
 
@@ -2081,7 +2086,7 @@ class SnapTraceUtils():
         stillLinesToCheck = True
         currRestrictionGeom = currRestriction.geometry()
         currGeometryID = currRestriction["GeometryID"]
-        print ('******* checking: {}'.format(currGeometryID))
+        #print ('******* checking: {}'.format(currGeometryID))
         TOMsMessageLog.logMessage('******* checking: {}'.format(currGeometryID),
                                  level=Qgis.Info)
         shapeChanged = False
@@ -2094,34 +2099,36 @@ class SnapTraceUtils():
             startPoint = currRestrictionPtsList[0]
             endPoint = currRestrictionPtsList[len(currRestrictionPtsList)-1]
 
-            print ('start: {}; end: {}'.format(startPoint.asWkt(), endPoint.asWkt()))
+            #print ('start: {}; end: {}'.format(startPoint.asWkt(), endPoint.asWkt()))
 
             # find connected restrictions
             nodeList = [startPoint, endPoint]
             foundConnection = 0
 
-            print ('already_processed: {}'.format(already_processed))
-            print ('currRestrictionPtsList: {}'.format(currRestrictionPtsList))
+            #print ('already_processed: {}'.format(already_processed))
+            #print ('currRestrictionPtsList: {}'.format(currRestrictionPtsList))
             TOMsMessageLog.logMessage('already_processed: {}'.format(already_processed),
                                      level=Qgis.Info)
             for node in nodeList:
 
-                node, feature = self.findNearestNodeOnLineLayer(node, sourceLineLayer,
-                                                                            DUPLICATE_POINT_DISTANCE,
+                node_found, feature = self.findNearestNodeOnLineLayer(node, sourceLineLayer,
+                                                                            MERGE_DISTANCE,
                                                                             already_processed)
-                print ('******* considering: {}'.format(node))
-                if node:
-                    print ('*** node: {}'.format(feature["GeometryID"]))
+                #print ('******* considering: {}'.format(node))
+
+                if node_found:
+                    #print ('*** node: {}'.format(feature["GeometryID"]))
                     TOMsMessageLog.logMessage('*** node: {}'.format(feature["GeometryID"]),
-                                             level=Qgis.Info)
+                                              level=Qgis.Warning)
+
                     checkGeometryID = feature["GeometryID"]
 
                     if not(checkGeometryID in already_processed) and self.sameRestrictionAttributes(currRestriction, feature, checkFieldList):
-                        print ('*** MERGING ***')
+                        #print ('*** MERGING ***')
                         TOMsMessageLog.logMessage('*** MERGING ***',
-                                                 level=Qgis.Info)
+                                                 level=Qgis.Warning)
                         newShape = self.mergeRestrictionGeometries(feature.geometry(), currRestrictionGeom)
-                        print (newShape)
+                        #print (newShape)
                         shapeChanged = True
 
                         currRestrictionGeom = newShape # *******
@@ -2130,7 +2137,7 @@ class SnapTraceUtils():
                         #with edit(sourceLineLayer):
                         sourceLineLayer.deleteFeature(feature.id())
 
-                    already_processed.append(checkGeometryID)
+                        already_processed.append(checkGeometryID)
 
             if foundConnection == 0:
                 stillLinesToCheck = False
