@@ -63,9 +63,9 @@ TEST_DATA_DIR = unitTestDataPath()
 """
 
 from TOMs_Snap_Trace import TOMsSnapTrace, SnapTraceUtils
+#from TOMs_Snap_Trace.test.utilities import get_qgis_app
 
-from utilities import get_qgis_app
-QGIS_APP = get_qgis_app()
+#QGIS_APP = get_qgis_app()
 
 """qgs = QgsApplication([], False)
 QgsApplication.setPrefixPath("C:\QGIS_310\apps\qgis-ltr", True)
@@ -522,3 +522,90 @@ if __name__ == "__main__":
     runner = unittest.TextTestRunner(verbosity=2)
     runner.run(suite)
 
+
+
+"""
+Extras
+
+from qgis.core import *
+from qgis.gui import *
+from qgis.analysis import *
+#
+from qgis.PyQt.QtCore import *
+from qgis.PyQt.QtGui import *
+#
+traceLineString1 = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(0, 0), QgsPointXY(1, 0), QgsPointXY(2, 1), QgsPointXY(2, 2), QgsPointXY(3, 1), QgsPointXY(3, 0), QgsPointXY(-1, 2), QgsPointXY(-1, 1), QgsPointXY(0, 0)]
+        )
+traceLayer = QgsVectorLayer(
+            ('LineString?crs=epsg:27700&index=yes'),
+            'traceLayer',
+            'memory')
+traceProvider = traceLayer.dataProvider()
+traceFields = traceLayer.fields()
+traceFeature1 = QgsFeature(traceFields)
+traceFeature1.setGeometry(traceLineString1)
+traceProvider.addFeatures([traceFeature1])
+#
+currLineString1 = QgsGeometry.fromPolylineXY(
+            [QgsPointXY(1, 0), QgsPointXY(2, 1), QgsPointXY(2, 2)]
+        )
+currLayer = QgsVectorLayer(
+            ('LineString?crs=epsg:27700&index=yes'),
+            'currLayer',
+            'memory')
+currProvider = currLayer.dataProvider()
+currFields = currLayer.fields()
+currFeature1 = QgsFeature(currFields)
+currFeature1.setGeometry(currLineString1)
+currProvider.addFeatures([currFeature1])
+#
+#currLayer = QgsProject.instance().mapLayersByName("Lines")[0]
+#traceLayer = QgsProject.instance().mapLayersByName("RoadCasement")[0]
+#
+director = QgsVectorLayerDirector(traceLayer, -1, '', '', '', QgsVectorLayerDirector.DirectionBoth)
+strategy = QgsNetworkDistanceStrategy()
+director.addStrategy(strategy)
+builder = QgsGraphBuilder(traceLayer.crs(), False)
+#
+#startPoint = QgsPointXY(623298.33105399354826659, 136284.14234577579190955)
+#endPoint = QgsPointXY(623291.15000000025611371, 136275.49999999997089617)
+startPoint = QgsPointXY(1, 0)
+endPoint = QgsPointXY(2, 2)
+#
+tiedPoints = director.makeGraph(builder, [startPoint, endPoint])
+tStart, tStop = tiedPoints
+#
+graph = builder.graph()
+idxStart = graph.findVertex(tStart)
+#
+tree = QgsGraphAnalyzer.shortestTree(graph, idxStart, 0)
+#
+idxStart = tree.findVertex(tStart)
+idxEnd = tree.findVertex(tStop)
+#
+if idxEnd == -1:
+    raise Exception('No route!')  
+#
+# Add last point
+#
+route = [tree.vertex(idxEnd).point()]
+#
+# Iterate the graph
+while idxEnd != idxStart:
+    edgeIds = tree.vertex(idxEnd).incomingEdges()
+    print('EdgeIds: {}'.format(edgeIds))
+    if len(edgeIds) == 0:
+        break
+    edge = tree.edge(edgeIds[0])
+    route.insert(0, tree.vertex(edge.fromVertex()).point())
+    idxEnd = edge.fromVertex()
+#
+# Display
+rb = QgsRubberBand(iface.mapCanvas())
+rb.setColor(Qt.green)
+for p in route:
+    rb.addPoint(p)
+    
+    
+"""
