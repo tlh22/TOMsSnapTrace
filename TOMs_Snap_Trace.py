@@ -2134,6 +2134,15 @@ class SnapTraceUtils():
                         currRestrictionGeom = newShape # *******
                         foundConnection = foundConnection + 1
 
+                        TOMsMessageLog.logMessage(' -- RestrictionTypeID {}; Bays {}'.format(currRestriction["RestrictionTypeID"], currRestriction["NrBays"]),
+                                                  level=Qgis.Warning)
+
+                        if currRestriction["RestrictionTypeID"] < 200:  # If this is a bay ... # TODO: have a function to check type of restriction
+                            if feature["NrBays"] == 1:
+                                idx_nrBays = currRestriction.fields().indexFromName("NrBays")
+                                currRestriction[idx_nrBays] = currRestriction["NrBays"] + 1
+                                TOMsMessageLog.logMessage(' -- Incrementing number of bays',
+                                                          level=Qgis.Warning)
                         #with edit(sourceLineLayer):
                         sourceLineLayer.deleteFeature(feature.id())
 
