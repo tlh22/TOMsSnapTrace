@@ -341,7 +341,7 @@ class TOMsSnapTrace:
                 TOMsMessageLog.logMessage("********** removePointsOutsideTolerance ...", level=Qgis.Warning)
                 utils.removePointsOutsideTolerance (Bays, Kerbline, tolerance)
 
-            if mergeGeometries:
+            """if mergeGeometries:  #currently not working correctly. Somehow liks points that are not joined ...
 
                 # Now trace ...
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
@@ -349,7 +349,7 @@ class TOMsSnapTrace:
                 TOMsMessageLog.logMessage("********** Merge geometries...", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
-                    utils.mergeGeometriesWithSameAttributes (currRestrictionLayer)
+                    utils.mergeGeometriesWithSameAttributes (currRestrictionLayer)"""
 
             # Set up all the layers - in init ...
 
@@ -2015,12 +2015,14 @@ class SnapTraceUtils():
 
         """ This is really to check whether or not there is a problem with the trace tool """
 
-        checkFieldList = ["RestrictionTypeID", "GeomShapeID",
-                          #"NrBays",
-                          "TimePeriodID",
-                          "PayTypeID", "MaxStayID", "NoReturnID",
-                          #"NoWaitingTimeID", "NoLoadingTimeID", "Unacceptability",
-                          "RoadName"]
+        checkFieldList = ["RestrictionTypeID", "GeomShapeID"
+                          #,"NrBays",
+                          #"TimePeriodID",
+                          #"PayTypeID", "MaxStayID", "NoReturnID",
+                          ,"NoWaitingTimeID"
+                          #, "NoLoadingTimeID", "Unacceptability",
+                          #"RoadName"
+                          ]
 
         TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes " + sourceLineLayer.name(), level=Qgis.Warning)
 
