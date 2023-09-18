@@ -72,8 +72,8 @@ from TOMs_Snap_Trace_dialog import TOMsSnapTraceDialog
 from TOMs.core.TOMsMessageLog import TOMsMessageLog
 from TOMs.restrictionTypeUtilsClass import TOMsConfigFile
 
-DUPLICATE_POINT_DISTANCE = 0.1
-MERGE_DISTANCE = 0.1
+DUPLICATE_POINT_DISTANCE = 0.01
+MERGE_DISTANCE = 0.01
 SMALL_ANGLE_RADIANS = 0.0001
 
 class TOMsSnapTrace:
