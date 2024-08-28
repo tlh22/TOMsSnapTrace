@@ -55,7 +55,7 @@ from qgis.core import (
     QgsMessageLog, QgsFeature, QgsGeometry, QgsGeometryUtils,
     QgsTransaction, QgsTransactionGroup,
     QgsProject,
-    QgsApplication, QgsRectangle, QgsPoint, QgsWkbTypes, QgsPointXY,
+    QgsApplication, QgsRectangle, QgsPoint, QgsWkbTypes, QgsPointXY, QgsPointLocator,
     edit
 )
 
@@ -341,7 +341,7 @@ class TOMsSnapTrace:
                 TOMsMessageLog.logMessage("********** removePointsOutsideTolerance ...", level=Qgis.Warning)
                 utils.removePointsOutsideTolerance (Bays, Kerbline, tolerance)
 
-            """if mergeGeometries:  #currently not working correctly. Somehow liks points that are not joined ...
+            if mergeGeometries:  #currently not working correctly. Somehow liks points that are not joined ...
 
                 # Now trace ...
                 # For each restriction layer ? (what about signs and polygons ?? (Maybe only lines and bays at this point)
@@ -349,7 +349,7 @@ class TOMsSnapTrace:
                 TOMsMessageLog.logMessage("********** Merge geometries...", level=Qgis.Warning)
 
                 for currRestrictionLayer in listRestrictionLayers:
-                    utils.mergeGeometriesWithSameAttributes (currRestrictionLayer)"""
+                    utils.mergeGeometriesWithSameAttributes (currRestrictionLayer)
 
             # Set up all the layers - in init ...
 
@@ -753,7 +753,77 @@ class SnapTraceUtils():
 
         return None, None
 
-        """def findNearestPointL_2(self, searchPt, currRestriction, lineLayer, tolerance):
+
+
+    """
+    def findNearestNodeOnLineLayer(self, searchPt, lineLayer, tolerance, GeometryIDs=None, currFeatureID=None):
+        # given a point, find the nearest point (within the tolerance) within the line layer
+        # returns QgsPoint
+        TOMsMessageLog.logMessage("In findNearestNodeOnLineLayer. Checking lineLayer: {}".format(lineLayer.name()),
+                                  level=Qgis.Info)
+        searchRect = QgsRectangle(searchPt.x() - tolerance,
+                                  searchPt.y() - tolerance,
+                                  searchPt.x() + tolerance,
+                                  searchPt.y() + tolerance)
+
+        request = QgsFeatureRequest()
+        request.setFilterRect(searchRect)
+        request.setFlags(QgsFeatureRequest.ExactIntersect)
+
+        shortestDistance = float("inf")
+        # nearestPoint = QgsFeature()
+
+        ptLocator = QgsPointLocator(layer=lineLayer, extent=searchRect)
+
+        class FidFilter(QgsPointLocator.MatchFilter):
+            def __init__(self, fid):
+                QgsPointLocator.MatchFilter.__init__(self)
+                self.fid = fid
+
+            def acceptMatch(self, m):
+                if m.featureId() == self.fid:
+                    return False
+                return True
+
+        match = ptLocator.nearestLineEndpoints(searchPt, tolerance, FidFilter(currFeatureID))
+
+        TOMsMessageLog.logMessage("In findNearestNodeOnLineLayer: {}. Status: {}".format(currFeatureID, match), level=Qgis.Info)
+
+        if match.hasLineEndpoint():
+
+            closestPoint = match.point()
+            closestFeatureId = match.featureId()
+            TOMsMessageLog.logMessage("In findNearestNodeOnLineLayer: {}".format(closestFeatureId), level=Qgis.Info)
+            return QgsGeometry.fromPointXY(closestPoint), lineLayer.getFeature(closestFeatureId)
+
+        else:
+
+            # Loop through all features in the layer to find the closest feature
+            for f in lineLayer.getFeatures(request):
+
+                TOMsMessageLog.logMessage("In findNearestNodeOnLineLayer: {}".format(f.id()), level=Qgis.Info)
+
+                closestPtOnFeature = f.geometry().nearestPoint(QgsGeometry.fromPointXY(searchPt))
+                dist = f.geometry().distance(QgsGeometry.fromPointXY(searchPt))
+                if dist < shortestDistance:
+                    shortestDistance = dist
+                    closestPoint = closestPtOnFeature
+                    closestFeature = f
+
+            TOMsMessageLog.logMessage("In findNearestPointL: shortestDistance: " + str(shortestDistance),
+                                      level=Qgis.Info)
+
+            if shortestDistance < float("inf"):
+                # nearestPoint = QgsFeature()
+                # add the geometry to the feature,
+                # nearestPoint.setGeometry(QgsGeometry(closestPtOnFeature))
+                # TOMsMessageLog.logMessage("findNearestPointL: nearestPoint geom type: " + str(nearestPoint.wkbType()), tag="TOMs panel")
+                return closestPoint, closestFeature  # returns a geometry
+
+        return None, None
+    """
+    """
+    def findNearestPointL_2(self, searchPt, currRestriction, lineLayer, tolerance):
         # given a point, find the nearest point (within the tolerance) within the line layer
         # returns QgsPoint
         TOMsMessageLog.logMessage("In findNearestPointL_2. Checking lineLayer: " + lineLayer.name(), level=Qgis.Info)
@@ -2016,12 +2086,12 @@ class SnapTraceUtils():
         """ This is really to check whether or not there is a problem with the trace tool """
 
         checkFieldList = ["RestrictionTypeID", "GeomShapeID"
-                          #,"NrBays",
-                          #"TimePeriodID",
-                          #"PayTypeID", "MaxStayID", "NoReturnID",
-                          ,"NoWaitingTimeID"
-                          #, "NoLoadingTimeID", "Unacceptability",
-                          #"RoadName"
+                          #,"NrBays"
+                          ,"TimePeriodID"
+                          #,"PayTypeID", "MaxStayID", "NoReturnID"
+                          #,"NoWaitingTimeID"
+                          #,"NoLoadingTimeID", "Unacceptability"
+                          ,"RoadName"
                           ]
 
         TOMsMessageLog.logMessage("In mergeGeometriesWithSameAttributes " + sourceLineLayer.name(), level=Qgis.Warning)
@@ -2032,7 +2102,9 @@ class SnapTraceUtils():
                                         "mergeGeometriesWithSameAttributes: Status for starting edit session on " + sourceLineLayer.name() + " is: " + str(
                                             editStartStatus),
                                         QMessageBox.Ok)"""
-
+        reply = QMessageBox.information(None, "Check",
+                                                "mergeGeometriesWithSameAttributes: Considering attributes {}".format(checkFieldList) ,
+                                                QMessageBox.Ok)
         if editStartStatus is False:
             # save the active layer
 
@@ -2088,10 +2160,10 @@ class SnapTraceUtils():
         stillLinesToCheck = True
         currRestrictionGeom = currRestriction.geometry()
         currGeometryID = currRestriction["GeometryID"]
-        #print ('******* checking: {}'.format(currGeometryID))
         TOMsMessageLog.logMessage('******* checking: {}'.format(currGeometryID),
                                  level=Qgis.Info)
         shapeChanged = False
+        idxNrBays = sourceLineLayer.fields().indexFromName('bNoBays')
 
         while stillLinesToCheck:
 
@@ -2101,43 +2173,62 @@ class SnapTraceUtils():
             startPoint = currRestrictionPtsList[0]
             endPoint = currRestrictionPtsList[len(currRestrictionPtsList)-1]
 
-            #print ('start: {}; end: {}'.format(startPoint.asWkt(), endPoint.asWkt()))
-
             # find connected restrictions
             nodeList = [startPoint, endPoint]
             foundConnection = 0
 
-            #print ('already_processed: {}'.format(already_processed))
-            #print ('currRestrictionPtsList: {}'.format(currRestrictionPtsList))
-            TOMsMessageLog.logMessage('already_processed: {}'.format(already_processed),
-                                     level=Qgis.Info)
+            #TOMsMessageLog.logMessage('already_processed: {}'.format(already_processed),
+            #                         level=Qgis.Info)
+
             for node in nodeList:
 
                 node_found, feature = self.findNearestNodeOnLineLayer(node, sourceLineLayer,
                                                                             MERGE_DISTANCE,
-                                                                            already_processed)
-                #print ('******* considering: {}'.format(node))
+                                                                            already_processed
+                                                                            )
 
                 if node_found:
-                    #print ('*** node: {}'.format(feature["GeometryID"]))
-                    TOMsMessageLog.logMessage('*** node: {}'.format(feature["GeometryID"]),
-                                              level=Qgis.Warning)
+
+                    TOMsMessageLog.logMessage('*** close feature found. Checking: {} and {}'.format(currGeometryID, feature["GeometryID"]),
+                                              level=Qgis.Info)
 
                     checkGeometryID = feature["GeometryID"]
 
                     if not(checkGeometryID in already_processed) and self.sameRestrictionAttributes(currRestriction, feature, checkFieldList):
-                        #print ('*** MERGING ***')
+
                         TOMsMessageLog.logMessage('*** MERGING ***',
-                                                 level=Qgis.Warning)
-                        newShape = self.mergeRestrictionGeometries(feature.geometry(), currRestrictionGeom)
-                        #print (newShape)
-                        shapeChanged = True
+                                                 level=Qgis.Info)
 
-                        currRestrictionGeom = newShape # *******
-                        foundConnection = foundConnection + 1
+                        newShape = currRestrictionGeom.combine(feature.geometry())
+                        singleFeature = newShape.convertToSingleType()
 
-                        #with edit(sourceLineLayer):
-                        sourceLineLayer.deleteFeature(feature.id())
+                        if not singleFeature:
+
+                            TOMsMessageLog.logMessage('*** Merge resulted in multi-geometry !!!',
+                                                      level=Qgis.Info)
+
+                        else:
+
+                            shapeChanged = True
+
+                            currRestrictionGeom = newShape # *******
+                            foundConnection = foundConnection + 1
+
+                            # TODO: Check to see if there is a NrBays field - and increment ...
+
+                            if idxNrBays != -1:
+
+                                newFeatureNrBays = int(feature["bNoBays"])
+                                currNrBays = int(currRestriction["bNoBays"])
+                                newNrBays = currNrBays + newFeatureNrBays
+
+                                currRestriction[idxNrBays] = newNrBays
+                                test = sourceLineLayer.updateFeature(currRestriction)
+
+                                TOMsMessageLog.logMessage('*** Dealing with nr bays. Current: {}; Add: {}; Total: {}. Result: {}'.format(currNrBays, newFeatureNrBays, newNrBays, test),
+                                                          level=Qgis.Info)
+
+                            sourceLineLayer.deleteFeature(feature.id())
 
                         already_processed.append(checkGeometryID)
 
@@ -2147,10 +2238,11 @@ class SnapTraceUtils():
         if shapeChanged:
             #TOMsMessageLog.logMessage("In checkLineForSelfOverlap. changes written ... ",
             #                         level=Qgis.Info)
-            #print ('In checkLineForSelfOverlap. changes written ...')
             newShape = QgsGeometry.fromPolylineXY(currRestrictionPtsList)
             return newShape
 
+        TOMsMessageLog.logMessage('-- No features found to merge ...',
+                                  level=Qgis.Info)
         return None
 
     def sameRestrictionAttributes(self, restrictionA, restrictionB, checkFieldList):
